@@ -1,0 +1,648 @@
+import { useMemo, useState } from "react";
+import { router } from "@inertiajs/react";
+import { DashboardLayout } from "../_components/layout.tsx";
+import { useCurrentSchool } from "../_components/use-current-school.ts";
+import { Button } from "@/components/ui/button.tsx";
+import { Input } from "@/components/ui/input.tsx";
+import { Label } from "@/components/ui/label.tsx";
+import { Badge } from "@/components/ui/badge.tsx";
+import { Card, CardContent } from "@/components/ui/card.tsx";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
+} from "@/components/ui/dialog.tsx";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select.tsx";
+import {
+  Users, Plus, Search, Eye, Pencil, Trash2,
+  Phone, Mail, MapPin, Calendar, User, HeartPulse,
+} from "lucide-react";
+import { toast } from "sonner";
+import { useForm, useFieldArray } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
+import { format } from "date-fns";
+import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription, EmptyContent } from "@/components/ui/empty.tsx";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs.tsx";
+import { Textarea } from "@/components/ui/textarea.tsx";
+import type { Branch, School } from "@/lib/types.ts";
+
+const GRADES = ["Pre-K", "Kindergarten", "Grade 1", "Grade 2", "Grade 3", "Grade 4", "Grade 5",
+  "Grade 6", "Grade 7", "Grade 8", "Grade 9", "Grade 10", "Grade 11", "Grade 12"];
+
+type Guardian = {
+  name: string;
+  relationship: string;
+  phone: string;
+  email?: string;
+  occupation?: string;
+  isEmergencyContact: boolean;
+};
+
+export type Student = {
+  id: number;
+  schoolId: number;
+  branchId?: string | null;
+  firstName: string;
+  lastName: string;
+  dateOfBirth?: string | null;
+  gender?: "male" | "female" | "other" | null;
+  nationality?: string | null;
+  religion?: string | null;
+  bloodGroup?: string | null;
+  studentId: string;
+  gradeLevel?: string | null;
+  classSection?: string | null;
+  enrollmentDate?: string | null;
+  academicYear?: string | null;
+  address?: string | null;
+  city?: string | null;
+  state?: string | null;
+  zip?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  guardians?: Guardian[] | null;
+  status: string;
+  medicalNotes?: string | null;
+  createdAt: string;
+};
+
+type Stats = {
+  total: number;
+  active: number;
+  byGrade: Record<string, number>;
+};
+
+const studentSchema = z.object({
+  firstName: z.string().min(1, "Required"),
+  lastName: z.string().min(1, "Required"),
+  dateOfBirth: z.string().optional(),
+  gender: z.enum(["male", "female", "other"]).optional(),
+  gradeLevel: z.string().optional(),
+  classSection: z.string().optional(),
+  email: z.string().email().optional().or(z.literal("")),
+  phone: z.string().optional(),
+  address: z.string().optional(),
+  city: z.string().optional(),
+  state: z.string().optional(),
+  nationality: z.string().optional(),
+  bloodGroup: z.string().optional(),
+  medicalNotes: z.string().optional(),
+  enrollmentDate: z.string().optional(),
+  academicYear: z.string().optional(),
+  guardians: z.array(z.object({
+    name: z.string().min(1, "Required"),
+    relationship: z.string().min(1, "Required"),
+    phone: z.string().min(1, "Required"),
+    email: z.string().optional(),
+    occupation: z.string().optional(),
+    isEmergencyContact: z.boolean(),
+  })).optional(),
+});
+type StudentFormData = z.infer<typeof studentSchema>;
+
+const statusColors: Record<string, string> = {
+  active: "bg-green-100 text-green-700 border-green-200",
+  inactive: "bg-gray-100 text-gray-600 border-gray-200",
+  graduated: "bg-blue-100 text-blue-700 border-blue-200",
+  transferred: "bg-purple-100 text-purple-700 border-purple-200",
+  suspended: "bg-red-100 text-red-700 border-red-200",
+};
+
+function StudentFormDialog({
+  open,
+  onClose,
+  editStudent,
+  branches,
+}: {
+  open: boolean;
+  onClose: () => void;
+  editStudent?: Student | null;
+  branches: Branch[];
+}) {
+  const isEdit = !!editStudent;
+
+  const { register, handleSubmit, control, setValue, formState: { errors, isSubmitting }, reset } =
+    useForm<StudentFormData>({
+      resolver: zodResolver(studentSchema),
+      defaultValues: editStudent ? {
+        firstName: editStudent.firstName,
+        lastName: editStudent.lastName,
+        dateOfBirth: editStudent.dateOfBirth ?? undefined,
+        gender: editStudent.gender ?? undefined,
+        gradeLevel: editStudent.gradeLevel ?? undefined,
+        classSection: editStudent.classSection ?? undefined,
+        email: editStudent.email ?? undefined,
+        phone: editStudent.phone ?? undefined,
+        address: editStudent.address ?? undefined,
+        city: editStudent.city ?? undefined,
+        state: editStudent.state ?? undefined,
+        nationality: editStudent.nationality ?? undefined,
+        bloodGroup: editStudent.bloodGroup ?? undefined,
+        medicalNotes: editStudent.medicalNotes ?? undefined,
+        enrollmentDate: editStudent.enrollmentDate ?? undefined,
+        academicYear: editStudent.academicYear ?? undefined,
+        guardians: editStudent.guardians ?? [],
+      } : {
+        guardians: [{ name: "", relationship: "", phone: "", email: "", isEmergencyContact: true }],
+        city: "Philadelphia",
+        state: "PA",
+        academicYear: "2024-2025",
+      },
+    });
+
+  const { fields: guardianFields, append: addGuardian, remove: removeGuardian } = useFieldArray({
+    control,
+    name: "guardians",
+  });
+
+  const onSubmit = (data: StudentFormData) =>
+    new Promise<void>((resolve) => {
+      const payload = { ...data, email: data.email || undefined };
+      const options = {
+        preserveScroll: true,
+        onSuccess: () => {
+          toast.success(isEdit ? "Student updated!" : "Student added!");
+          reset();
+          onClose();
+        },
+        onError: () => {
+          toast.error("Failed to save student");
+        },
+        onFinish: () => resolve(),
+      };
+      if (isEdit) {
+        router.put(`/dashboard/students/${editStudent.id}`, payload, options);
+      } else {
+        router.post("/dashboard/students", payload, options);
+      }
+    });
+
+  return (
+    <Dialog open={open} onOpenChange={onClose}>
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>{isEdit ? "Edit Student" : "Add New Student"}</DialogTitle>
+          <DialogDescription>Fill in the student details below.</DialogDescription>
+        </DialogHeader>
+        <form onSubmit={handleSubmit(onSubmit)}>
+          <Tabs defaultValue="personal">
+            <TabsList className="w-full mb-4">
+              <TabsTrigger value="personal" className="flex-1">Personal</TabsTrigger>
+              <TabsTrigger value="academic" className="flex-1">Academic</TabsTrigger>
+              <TabsTrigger value="guardians" className="flex-1">Guardians</TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="personal" className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label className="mb-1.5 block">First Name *</Label>
+                  <Input placeholder="John" {...register("firstName")} />
+                  {errors.firstName && <p className="text-destructive text-xs mt-1">{errors.firstName.message}</p>}
+                </div>
+                <div>
+                  <Label className="mb-1.5 block">Last Name *</Label>
+                  <Input placeholder="Smith" {...register("lastName")} />
+                  {errors.lastName && <p className="text-destructive text-xs mt-1">{errors.lastName.message}</p>}
+                </div>
+                <div>
+                  <Label className="mb-1.5 block">Date of Birth</Label>
+                  <Input type="date" {...register("dateOfBirth")} />
+                </div>
+                <div>
+                  <Label className="mb-1.5 block">Gender</Label>
+                  <Select onValueChange={(v) => setValue("gender", v as "male" | "female" | "other")}>
+                    <SelectTrigger><SelectValue placeholder="Select gender" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="male">Male</SelectItem>
+                      <SelectItem value="female">Female</SelectItem>
+                      <SelectItem value="other">Other</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label className="mb-1.5 block">Email</Label>
+                  <Input placeholder="student@example.com" {...register("email")} />
+                </div>
+                <div>
+                  <Label className="mb-1.5 block">Phone</Label>
+                  <Input placeholder="(215) 555-0100" {...register("phone")} />
+                </div>
+                <div>
+                  <Label className="mb-1.5 block">Nationality</Label>
+                  <Input placeholder="American" {...register("nationality")} />
+                </div>
+                <div>
+                  <Label className="mb-1.5 block">Blood Group</Label>
+                  <Input placeholder="A+" {...register("bloodGroup")} />
+                </div>
+                <div className="col-span-2">
+                  <Label className="mb-1.5 block">Address</Label>
+                  <Input placeholder="123 Main Street" {...register("address")} />
+                </div>
+                <div>
+                  <Label className="mb-1.5 block">City</Label>
+                  <Input placeholder="Philadelphia" {...register("city")} />
+                </div>
+                <div>
+                  <Label className="mb-1.5 block">State</Label>
+                  <Input placeholder="PA" {...register("state")} />
+                </div>
+                <div className="col-span-2">
+                  <Label className="mb-1.5 block">Medical Notes</Label>
+                  <Textarea placeholder="Any allergies, conditions, or medications..." rows={2} {...register("medicalNotes")} />
+                </div>
+              </div>
+            </TabsContent>
+
+            <TabsContent value="academic" className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label className="mb-1.5 block">Grade Level</Label>
+                  <Select onValueChange={(v) => setValue("gradeLevel", v)}>
+                    <SelectTrigger><SelectValue placeholder="Select grade" /></SelectTrigger>
+                    <SelectContent>
+                      {GRADES.map((g) => <SelectItem key={g} value={g}>{g}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label className="mb-1.5 block">Class Section</Label>
+                  <Input placeholder="e.g. A, B, C" {...register("classSection")} />
+                </div>
+                <div>
+                  <Label className="mb-1.5 block">Enrollment Date</Label>
+                  <Input type="date" {...register("enrollmentDate")} />
+                </div>
+                <div>
+                  <Label className="mb-1.5 block">Academic Year</Label>
+                  <Input placeholder="2024-2025" {...register("academicYear")} />
+                </div>
+                {branches.length > 0 && (
+                  <div className="col-span-2">
+                    <Label className="mb-1.5 block">Campus/Branch</Label>
+                    <Select onValueChange={(v) => setValue("academicYear", v)}>
+                      <SelectTrigger><SelectValue placeholder="Select campus" /></SelectTrigger>
+                      <SelectContent>
+                        {branches.map((b) => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+              </div>
+            </TabsContent>
+
+            <TabsContent value="guardians" className="space-y-4">
+              {guardianFields.map((field, index) => (
+                <Card key={field.id} className="p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <h4 className="text-sm font-semibold">Guardian {index + 1}</h4>
+                    {index > 0 && (
+                      <Button type="button" variant="ghost" size="sm" onClick={() => removeGuardian(index)} className="cursor-pointer text-destructive h-7">
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <Label className="mb-1.5 block text-xs">Full Name *</Label>
+                      <Input placeholder="Jane Smith" {...register(`guardians.${index}.name`)} />
+                    </div>
+                    <div>
+                      <Label className="mb-1.5 block text-xs">Relationship *</Label>
+                      <Input placeholder="Mother, Father, Guardian" {...register(`guardians.${index}.relationship`)} />
+                    </div>
+                    <div>
+                      <Label className="mb-1.5 block text-xs">Phone *</Label>
+                      <Input placeholder="(215) 555-0100" {...register(`guardians.${index}.phone`)} />
+                    </div>
+                    <div>
+                      <Label className="mb-1.5 block text-xs">Email</Label>
+                      <Input placeholder="guardian@email.com" {...register(`guardians.${index}.email`)} />
+                    </div>
+                    <div>
+                      <Label className="mb-1.5 block text-xs">Occupation</Label>
+                      <Input placeholder="Engineer, Teacher..." {...register(`guardians.${index}.occupation`)} />
+                    </div>
+                  </div>
+                </Card>
+              ))}
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                className="cursor-pointer"
+                onClick={() => addGuardian({ name: "", relationship: "", phone: "", email: "", isEmergencyContact: false })}
+              >
+                <Plus className="h-3.5 w-3.5 mr-1.5" /> Add Guardian
+              </Button>
+            </TabsContent>
+          </Tabs>
+
+          <div className="flex gap-3 mt-6 pt-4 border-t">
+            <Button type="submit" disabled={isSubmitting} className="cursor-pointer flex-1">
+              {isSubmitting ? "Saving..." : isEdit ? "Update Student" : "Add Student"}
+            </Button>
+            <Button type="button" variant="secondary" onClick={onClose} className="cursor-pointer">Cancel</Button>
+          </div>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function StudentDetailDialog({ student, onClose }: { student: Student | null; onClose: () => void }) {
+  if (!student) return null;
+  return (
+    <Dialog open={!!student} onOpenChange={onClose}>
+      <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+              <User className="h-5 w-5 text-primary" />
+            </div>
+            {student.firstName} {student.lastName}
+          </DialogTitle>
+          <DialogDescription>Student ID: {student.studentId}</DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4">
+          <div className="flex items-center gap-2">
+            <Badge className={`${statusColors[student.status]} border capitalize`}>{student.status}</Badge>
+            {student.gradeLevel && <Badge variant="secondary">{student.gradeLevel}</Badge>}
+            {student.classSection && <Badge variant="secondary">Section {student.classSection}</Badge>}
+          </div>
+
+          <div className="grid grid-cols-2 gap-3 text-sm">
+            {student.dateOfBirth && (
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <Calendar className="h-3.5 w-3.5" />
+                <span>Born {format(new Date(student.dateOfBirth), "MMM d, yyyy")}</span>
+              </div>
+            )}
+            {student.gender && (
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <User className="h-3.5 w-3.5" />
+                <span className="capitalize">{student.gender}</span>
+              </div>
+            )}
+            {student.email && (
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <Mail className="h-3.5 w-3.5" />
+                <span>{student.email}</span>
+              </div>
+            )}
+            {student.phone && (
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <Phone className="h-3.5 w-3.5" />
+                <span>{student.phone}</span>
+              </div>
+            )}
+            {(student.city || student.state) && (
+              <div className="flex items-center gap-2 text-muted-foreground col-span-2">
+                <MapPin className="h-3.5 w-3.5" />
+                <span>{[student.address, student.city, student.state].filter(Boolean).join(", ")}</span>
+              </div>
+            )}
+            {student.bloodGroup && (
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <HeartPulse className="h-3.5 w-3.5" />
+                <span>Blood Group: {student.bloodGroup}</span>
+              </div>
+            )}
+          </div>
+
+          {student.medicalNotes && (
+            <div className="p-3 rounded-lg bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800">
+              <p className="text-xs font-semibold text-amber-700 dark:text-amber-400 mb-1">Medical Notes</p>
+              <p className="text-sm text-amber-800 dark:text-amber-300">{student.medicalNotes}</p>
+            </div>
+          )}
+
+          {student.guardians && student.guardians.length > 0 && (
+            <div>
+              <h4 className="text-sm font-semibold mb-2">Guardians</h4>
+              <div className="space-y-2">
+                {student.guardians.map((g, i) => (
+                  <div key={i} className="p-3 rounded-lg border bg-muted/30">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium">{g.name}</span>
+                      <span className="text-xs text-muted-foreground">{g.relationship}</span>
+                    </div>
+                    <div className="flex gap-3 mt-1 text-xs text-muted-foreground">
+                      <span>{g.phone}</span>
+                      {g.email && <span>{g.email}</span>}
+                    </div>
+                    {g.isEmergencyContact && (
+                      <Badge className="mt-1 bg-red-100 text-red-700 border-red-200 border text-xs">Emergency Contact</Badge>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function StudentsContent({ students, stats, school }: PageProps) {
+  const { schoolId } = useCurrentSchool();
+  const [search, setSearch] = useState("");
+  const [gradeFilter, setGradeFilter] = useState("all");
+  const [addOpen, setAddOpen] = useState(false);
+  const [editStudent, setEditStudent] = useState<Student | null>(null);
+  const [viewStudent, setViewStudent] = useState<Student | null>(null);
+
+  const branches = school?.branches ?? [];
+
+  const filteredStudents = useMemo(() => {
+    let result = students;
+    if (gradeFilter !== "all") {
+      result = result.filter((s) => s.gradeLevel === gradeFilter);
+    }
+    if (search) {
+      const term = search.toLowerCase();
+      result = result.filter(
+        (s) =>
+          s.firstName.toLowerCase().includes(term) ||
+          s.lastName.toLowerCase().includes(term) ||
+          s.studentId.toLowerCase().includes(term) ||
+          s.email?.toLowerCase().includes(term),
+      );
+    }
+    return result;
+  }, [students, search, gradeFilter]);
+
+  const handleDelete = (id: number) => {
+    if (!confirm("Are you sure you want to remove this student?")) return;
+    router.delete(`/dashboard/students/${id}`, {
+      preserveScroll: true,
+      onSuccess: () => toast.success("Student removed"),
+      onError: () => toast.error("Failed to remove student"),
+    });
+  };
+
+  if (!schoolId) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <p className="text-muted-foreground">No school linked to your account.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-extrabold">Students</h1>
+          <p className="text-muted-foreground">Manage all student records</p>
+        </div>
+        <Button onClick={() => setAddOpen(true)} className="cursor-pointer">
+          <Plus className="h-4 w-4 mr-1.5" /> Add Student
+        </Button>
+      </div>
+
+      {/* Stats */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {[
+          { label: "Total Students", value: stats?.total ?? "—", color: "text-blue-600" },
+          { label: "Active", value: stats?.active ?? "—", color: "text-green-600" },
+          { label: "Grade Levels", value: Object.keys(stats?.byGrade ?? {}).length || "—", color: "text-purple-600" },
+          { label: "Branches", value: branches.length || "1", color: "text-amber-600" },
+        ].map((s) => (
+          <Card key={s.label}>
+            <CardContent className="p-4">
+              <p className={`text-2xl font-bold ${s.color}`}>{s.value}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">{s.label}</p>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      {/* Filters */}
+      <div className="flex flex-col sm:flex-row gap-3">
+        <div className="relative flex-1 max-w-sm">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            className="pl-9"
+            placeholder="Search by name, ID..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </div>
+        <Select value={gradeFilter} onValueChange={setGradeFilter}>
+          <SelectTrigger className="w-44">
+            <SelectValue placeholder="All grades" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Grades</SelectItem>
+            {GRADES.map((g) => <SelectItem key={g} value={g}>{g}</SelectItem>)}
+          </SelectContent>
+        </Select>
+      </div>
+
+      {/* Table */}
+      {filteredStudents.length === 0 ? (
+        <Empty>
+          <EmptyHeader>
+            <EmptyMedia variant="icon"><Users /></EmptyMedia>
+            <EmptyTitle>No students found</EmptyTitle>
+            <EmptyDescription>
+              {search || gradeFilter !== "all" ? "Try adjusting your filters." : "Add your first student to get started."}
+            </EmptyDescription>
+          </EmptyHeader>
+          <EmptyContent>
+            <Button size="sm" onClick={() => setAddOpen(true)} className="cursor-pointer">
+              <Plus className="h-3.5 w-3.5 mr-1.5" /> Add Student
+            </Button>
+          </EmptyContent>
+        </Empty>
+      ) : (
+        <Card>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b bg-muted/40">
+                  <th className="text-left px-4 py-3 font-semibold text-xs uppercase text-muted-foreground">Student</th>
+                  <th className="text-left px-4 py-3 font-semibold text-xs uppercase text-muted-foreground">ID</th>
+                  <th className="text-left px-4 py-3 font-semibold text-xs uppercase text-muted-foreground hidden md:table-cell">Grade</th>
+                  <th className="text-left px-4 py-3 font-semibold text-xs uppercase text-muted-foreground hidden lg:table-cell">Contact</th>
+                  <th className="text-left px-4 py-3 font-semibold text-xs uppercase text-muted-foreground">Status</th>
+                  <th className="text-right px-4 py-3 font-semibold text-xs uppercase text-muted-foreground">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {filteredStudents.map((student) => (
+                  <tr key={student.id} className="hover:bg-muted/20 transition-colors">
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-xs flex-shrink-0">
+                          {student.firstName[0]}{student.lastName[0]}
+                        </div>
+                        <div>
+                          <p className="font-medium">{student.firstName} {student.lastName}</p>
+                          {student.email && <p className="text-xs text-muted-foreground">{student.email}</p>}
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-muted-foreground font-mono text-xs">{student.studentId}</td>
+                    <td className="px-4 py-3 hidden md:table-cell">
+                      {student.gradeLevel ? (
+                        <Badge variant="secondary" className="text-xs">{student.gradeLevel}</Badge>
+                      ) : "—"}
+                    </td>
+                    <td className="px-4 py-3 hidden lg:table-cell text-muted-foreground text-xs">
+                      {student.phone ?? student.email ?? "—"}
+                    </td>
+                    <td className="px-4 py-3">
+                      <Badge className={`${statusColors[student.status]} border text-xs capitalize`}>
+                        {student.status}
+                      </Badge>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center justify-end gap-1">
+                        <Button variant="ghost" size="sm" className="h-7 w-7 p-0 cursor-pointer" onClick={() => setViewStudent(student)}>
+                          <Eye className="h-3.5 w-3.5" />
+                        </Button>
+                        <Button variant="ghost" size="sm" className="h-7 w-7 p-0 cursor-pointer" onClick={() => setEditStudent(student)}>
+                          <Pencil className="h-3.5 w-3.5" />
+                        </Button>
+                        <Button variant="ghost" size="sm" className="h-7 w-7 p-0 cursor-pointer text-destructive hover:text-destructive" onClick={() => handleDelete(student.id)}>
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
+
+      <StudentFormDialog
+        key={editStudent?.id ?? "new"}
+        open={addOpen || !!editStudent}
+        onClose={() => { setAddOpen(false); setEditStudent(null); }}
+        editStudent={editStudent}
+        branches={branches}
+      />
+      <StudentDetailDialog student={viewStudent} onClose={() => setViewStudent(null)} />
+    </div>
+  );
+}
+
+type PageProps = {
+  students: Student[];
+  stats: Stats;
+  school: School | null;
+};
+
+export default function StudentsPage(props: PageProps) {
+  return (
+    <DashboardLayout>
+      <StudentsContent {...props} />
+    </DashboardLayout>
+  );
+}
