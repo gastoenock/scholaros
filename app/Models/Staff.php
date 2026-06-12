@@ -4,10 +4,13 @@ namespace App\Models;
 
 use App\Models\Concerns\CamelCasesAttributes;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Staff extends Model
 {
     use CamelCasesAttributes;
+    use SoftDeletes;
 
     protected $table = 'staff';
 
@@ -18,6 +21,11 @@ class Staff extends Model
         'emergency_contact' => 'array',
         'salary' => 'float',
     ];
+
+    public function branch(): BelongsTo
+    {
+        return $this->belongsTo(SchoolBranch::class, 'school_branch_id');
+    }
 
     public function scopeForSchool($query, $schoolId)
     {

@@ -11,9 +11,7 @@ return new class extends Migration
         Schema::create('meetings', function (Blueprint $table) {
             $table->id();
             $table->foreignId('school_id')->constrained('schools')->cascadeOnDelete();
-            $table->foreignId('parent_id')->constrained('users')->cascadeOnDelete();
-            $table->foreignId('teacher_id')->constrained('staff')->cascadeOnDelete();
-            $table->foreignId('student_id')->constrained('students')->cascadeOnDelete();
+            $table->foreignId('parent_id')->nullable()->constrained('users')->nullOnDelete();
             $table->string('title');
             $table->text('description')->nullable();
             $table->string('scheduled_at');
@@ -25,6 +23,45 @@ return new class extends Migration
             $table->text('notes')->nullable();
             $table->text('cancel_reason')->nullable();
             $table->timestamps();
+            $table->softDeletes();
+        });
+
+        Schema::create('meeting_staff', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('meeting_id')->constrained('meetings')->cascadeOnDelete();
+            $table->foreignId('staff_id')->constrained('staff')->cascadeOnDelete();
+            $table->timestamps();
+            $table->softDeletes();
+
+            $table->unique(['meeting_id', 'staff_id']);
+        });
+
+        Schema::create('meeting_student', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('meeting_id')->constrained('meetings')->cascadeOnDelete();
+            $table->foreignId('student_id')->constrained('students')->cascadeOnDelete();
+            $table->timestamps();
+            $table->softDeletes();
+
+            $table->unique(['meeting_id', 'student_id']);
+        });
+
+        Schema::create('events', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('school_id')->constrained('schools')->cascadeOnDelete();
+            $table->foreignId('school_branch_id')->nullable()->constrained('school_branches')->nullOnDelete();
+            $table->string('title');
+            $table->text('description')->nullable();
+            $table->string('start_at');
+            $table->string('end_at')->nullable();
+            $table->string('location')->nullable();
+            $table->string('event_type')->default('general');
+            $table->string('status')->default('scheduled');
+            $table->foreignId('created_by')->nullable()->constrained('users')->nullOnDelete();
+            $table->timestamps();
+            $table->softDeletes();
+
+            $table->index(['school_id', 'start_at']);
         });
 
         Schema::create('assets', function (Blueprint $table) {
@@ -45,6 +82,7 @@ return new class extends Migration
             $table->unsignedInteger('quantity')->default(1);
             $table->string('status')->default('in_use');
             $table->timestamps();
+            $table->softDeletes();
 
             $table->index(['school_id', 'category']);
         });
@@ -57,13 +95,47 @@ return new class extends Migration
             $table->string('relationship');
             $table->boolean('is_primary')->default(false);
             $table->timestamps();
+            $table->softDeletes();
+        });
+
+        Schema::create('call_sessions', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('school_id')->constrained('schools')->cascadeOnDelete();
+            $table->foreignId('initiator_id')->constrained('users')->cascadeOnDelete();
+            $table->string('call_type');
+            $table->string('room_code')->unique();
+            $table->string('title')->nullable();
+            $table->string('status')->default('ringing');
+            $table->string('started_at')->nullable();
+            $table->string('ended_at')->nullable();
+            $table->timestamps();
+            $table->softDeletes();
+
+            $table->index(['school_id', 'status']);
+        });
+
+        Schema::create('call_participants', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('call_session_id')->constrained('call_sessions')->cascadeOnDelete();
+            $table->foreignId('user_id')->constrained('users')->cascadeOnDelete();
+            $table->string('status')->default('invited');
+            $table->string('joined_at')->nullable();
+            $table->string('left_at')->nullable();
+            $table->timestamps();
+
+            $table->unique(['call_session_id', 'user_id']);
         });
     }
 
     public function down(): void
     {
+        Schema::dropIfExists('call_participants');
+        Schema::dropIfExists('call_sessions');
         Schema::dropIfExists('parent_student_links');
         Schema::dropIfExists('assets');
+        Schema::dropIfExists('events');
+        Schema::dropIfExists('meeting_student');
+        Schema::dropIfExists('meeting_staff');
         Schema::dropIfExists('meetings');
     }
 };

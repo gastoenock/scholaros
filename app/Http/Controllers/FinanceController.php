@@ -5,7 +5,9 @@ namespace App\Http\Controllers;
 use App\Models\Expense;
 use App\Models\FeePayment;
 use App\Models\FeeStructure;
+use App\Models\PettyCashFund;
 use App\Models\Student;
+use App\Services\AccountingService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -13,6 +15,8 @@ use Inertia\Response;
 
 class FinanceController extends Controller
 {
+    public function __construct(private AccountingService $accounting) {}
+
     public function index(Request $request): Response
     {
         $schoolId = $this->schoolId();
@@ -20,22 +24,37 @@ class FinanceController extends Controller
             'academicYear',
             sprintf('%d-%d', now()->year, now()->year + 1),
         );
+        $reportAsOf = $request->query('asOf', now()->toDateString());
 
         if (! $schoolId) {
             return Inertia::render('dashboard/finance/page', [
                 'academicYear' => $academicYear,
+                'reportAsOf' => $reportAsOf,
                 'summary' => null,
                 'payments' => [],
                 'expenses' => [],
                 'feeStructures' => [],
                 'students' => [],
+                'accounting' => null,
             ]);
         }
+
+        $this->accounting->ensureChartOfAccounts($schoolId);
+        $this->accounting->ensurePettyCashFund($schoolId, auth()->id());
 
         $payments = FeePayment::forSchool($schoolId)
             ->where('academic_year', $academicYear)
             ->orderByDesc('payment_date')
             ->get();
+
+        $studentMap = Student::forSchool($schoolId)->get(['id', 'first_name', 'last_name'])->keyBy('id');
+        $payments = $payments->map(function (FeePayment $payment) use ($studentMap) {
+            $student = $studentMap->get($payment->student_id);
+
+            return array_merge($payment->toArray(), [
+                'studentName' => $student ? trim("{$student->first_name} {$student->last_name}") : 'Unknown',
+            ]);
+        });
 
         $expenses = Expense::forSchool($schoolId)
             ->orderByDesc('date')
@@ -52,18 +71,29 @@ class FinanceController extends Controller
 
         $summary = $this->buildSummary($schoolId, $academicYear, $payments, $expenses);
 
+        $yearPrefix = explode('-', $academicYear)[0];
+        $pettyCashFund = PettyCashFund::forSchool($schoolId)->first();
+
         return Inertia::render('dashboard/finance/page', [
             'academicYear' => $academicYear,
+            'reportAsOf' => $reportAsOf,
             'summary' => $summary,
             'payments' => $payments,
             'expenses' => $expenses,
             'feeStructures' => $feeStructures,
             'students' => $students,
+            'accounting' => [
+                'cashBook' => $this->accounting->cashBook($schoolId, "{$yearPrefix}-01-01", $reportAsOf),
+                'pettyCashBook' => $this->accounting->pettyCashBook($schoolId),
+                'trialBalance' => $this->accounting->trialBalance($schoolId, $reportAsOf),
+                'balanceSheet' => $this->accounting->balanceSheet($schoolId, $reportAsOf),
+                'pettyCashFund' => $pettyCashFund?->toArray(),
+            ],
         ]);
     }
 
     /**
-     * @param  \Illuminate\Support\Collection<int, FeePayment>  $payments
+     * @param  \Illuminate\Support\Collection<int, array<string, mixed>|FeePayment>  $payments
      * @param  \Illuminate\Support\Collection<int, Expense>  $expenses
      * @return array<string, mixed>
      */
@@ -72,9 +102,9 @@ class FinanceController extends Controller
         $yearPrefix = explode('-', $academicYear)[0];
         $yearExpenses = $expenses->filter(fn (Expense $e) => str_starts_with($e->date, $yearPrefix));
 
-        $totalIncome = $payments
+        $totalIncome = collect($payments)
             ->where('status', 'paid')
-            ->sum('amount');
+            ->sum(fn ($p) => is_array($p) ? $p['amount'] : $p->amount);
 
         $totalExpenses = $yearExpenses
             ->where('status', 'approved')
@@ -88,10 +118,12 @@ class FinanceController extends Controller
             ];
         }
 
-        $payments->where('status', 'paid')->each(function (FeePayment $payment) use (&$byMonth) {
-            $month = substr($payment->payment_date, 5, 2);
+        collect($payments)->where('status', 'paid')->each(function ($payment) use (&$byMonth) {
+            $date = is_array($payment) ? $payment['paymentDate'] : $payment->payment_date;
+            $amount = is_array($payment) ? $payment['amount'] : $payment->amount;
+            $month = substr($date, 5, 2);
             if (isset($byMonth[$month])) {
-                $byMonth[$month]['income'] += (float) $payment->amount;
+                $byMonth[$month]['income'] += (float) $amount;
             }
         });
 
@@ -167,12 +199,14 @@ class FinanceController extends Controller
         $count = FeePayment::forSchool($schoolId)->count();
         $receiptNumber = sprintf('RCP-%d-%04d', now()->year, $count + 1);
 
-        FeePayment::create([
+        $payment = FeePayment::create([
             ...$this->snakeKeys($validated),
             'school_id' => $schoolId,
             'receipt_number' => $receiptNumber,
             'recorded_by' => auth()->id(),
         ]);
+
+        $this->accounting->postFeePayment($payment);
 
         return back()->with('success', 'Payment recorded successfully');
     }
@@ -197,13 +231,19 @@ class FinanceController extends Controller
             'amount' => ['required', 'numeric', 'min:0'],
             'date' => ['required', 'string'],
             'vendor' => ['nullable', 'string'],
+            'paymentMethod' => ['nullable', 'in:cash,bank,petty_cash'],
+            'referenceNumber' => ['nullable', 'string'],
             'status' => ['required', 'in:pending,approved,rejected'],
         ]);
 
-        Expense::create([
+        $expense = Expense::create([
             ...$this->snakeKeys($validated),
             'school_id' => $schoolId,
         ]);
+
+        if ($expense->status === 'approved') {
+            $this->accounting->postExpense($expense);
+        }
 
         return back()->with('success', 'Expense recorded');
     }
@@ -220,6 +260,10 @@ class FinanceController extends Controller
             'status' => $validated['status'],
             'approved_by' => auth()->id(),
         ]);
+
+        if ($validated['status'] === 'approved') {
+            $this->accounting->postExpense($expense->fresh());
+        }
 
         return back()->with('success', 'Expense status updated');
     }

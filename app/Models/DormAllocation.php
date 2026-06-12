@@ -4,10 +4,12 @@ namespace App\Models;
 
 use App\Models\Concerns\CamelCasesAttributes;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class DormAllocation extends Model
 {
     use CamelCasesAttributes;
+    use SoftDeletes;
 
     protected $table = 'dorm_allocations';
 

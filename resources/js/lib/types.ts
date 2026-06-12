@@ -14,11 +14,14 @@ export type SharedPageProps = {
 };
 
 export type Branch = {
-  id: string;
+  id: number;
+  schoolId: number;
+  code?: string | null;
   name: string;
-  address?: string;
-  phone?: string;
-  principalName?: string;
+  address?: string | null;
+  phone?: string | null;
+  principalName?: string | null;
+  isActive?: boolean;
 };
 
 export type School = {
@@ -36,6 +39,22 @@ export type School = {
   adminId?: number | null;
   isActive: boolean;
   plan: "trial" | "basic" | "premium";
-  branches?: Branch[] | null;
+  branches?: Branch[];
+  createdAt: string;
+};
+
+export type EventRecord = {
+  id: number;
+  schoolId: number;
+  schoolBranchId?: number | null;
+  title: string;
+  description?: string | null;
+  startAt: string;
+  endAt?: string | null;
+  location?: string | null;
+  eventType: string;
+  status: string;
+  createdBy?: number | null;
+  branch?: Branch | null;
   createdAt: string;
 };

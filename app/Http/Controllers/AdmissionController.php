@@ -41,7 +41,7 @@ class AdmissionController extends Controller
         abort_unless($schoolId, 403);
 
         $validated = $request->validate([
-            'branchId' => ['nullable', 'string'],
+            'schoolBranchId' => ['nullable', 'integer', 'exists:school_branches,id'],
             'firstName' => ['required', 'string', 'max:255'],
             'lastName' => ['required', 'string', 'max:255'],
             'dateOfBirth' => ['nullable', 'string'],
@@ -98,7 +98,7 @@ class AdmissionController extends Controller
 
         Student::create([
             'school_id' => $admission->school_id,
-            'branch_id' => $admission->branch_id,
+            'school_branch_id' => $admission->school_branch_id,
             'first_name' => $admission->first_name,
             'last_name' => $admission->last_name,
             'date_of_birth' => $admission->date_of_birth,

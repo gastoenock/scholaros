@@ -5,7 +5,6 @@ namespace App\Http\Controllers;
 use App\Models\Meeting;
 use App\Models\Staff;
 use App\Models\Student;
-use App\Models\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -20,7 +19,9 @@ class MeetingController extends Controller
         $meetings = collect();
 
         if ($schoolId) {
-            $query = Meeting::forSchool($schoolId)->orderByDesc('scheduled_at');
+            $query = Meeting::forSchool($schoolId)
+                ->with(['parent', 'staff', 'students'])
+                ->orderByDesc('scheduled_at');
 
             if ($request->filled('status') && $request->status !== 'all') {
                 $query->where('status', $request->status);
@@ -48,8 +49,10 @@ class MeetingController extends Controller
         abort_unless($schoolId, 403);
 
         $validated = $request->validate([
-            'teacherId' => ['required', 'integer', 'exists:staff,id'],
-            'studentId' => ['required', 'integer', 'exists:students,id'],
+            'staffIds' => ['required', 'array', 'min:1'],
+            'staffIds.*' => ['integer', 'exists:staff,id'],
+            'studentIds' => ['required', 'array', 'min:1'],
+            'studentIds.*' => ['integer', 'exists:students,id'],
             'title' => ['required', 'string', 'max:255'],
             'description' => ['nullable', 'string'],
             'scheduledAt' => ['required', 'string'],
@@ -59,12 +62,21 @@ class MeetingController extends Controller
             'meetingLink' => ['nullable', 'string'],
         ]);
 
-        Meeting::create([
-            ...$this->snakeKeys($validated),
+        $meeting = Meeting::create([
             'school_id' => $schoolId,
             'parent_id' => auth()->id(),
+            'title' => $validated['title'],
+            'description' => $validated['description'] ?? null,
+            'scheduled_at' => $validated['scheduledAt'],
+            'duration_minutes' => $validated['durationMinutes'],
+            'meeting_type' => $validated['meetingType'],
+            'location' => $validated['location'] ?? null,
+            'meeting_link' => $validated['meetingLink'] ?? null,
             'status' => 'requested',
         ]);
+
+        $meeting->staff()->sync($validated['staffIds']);
+        $meeting->students()->sync($validated['studentIds']);
 
         return back()->with('success', 'Meeting requested');
     }
@@ -98,18 +110,24 @@ class MeetingController extends Controller
      */
     private function enrichMeeting(Meeting $meeting): array
     {
-        $parent = User::find($meeting->parent_id);
-        $teacher = Staff::find($meeting->teacher_id);
-        $student = Student::find($meeting->student_id);
+        $staffNames = $meeting->staff
+            ->map(fn (Staff $s) => trim("{$s->first_name} {$s->last_name}"))
+            ->values()
+            ->all();
+
+        $studentNames = $meeting->students
+            ->map(fn (Student $s) => trim("{$s->first_name} {$s->last_name}"))
+            ->values()
+            ->all();
 
         return array_merge($meeting->toArray(), [
-            'parentName' => $parent?->name ?? 'Unknown',
-            'teacherName' => $teacher
-                ? trim("{$teacher->first_name} {$teacher->last_name}")
-                : 'Unknown',
-            'studentName' => $student
-                ? trim("{$student->first_name} {$student->last_name}")
-                : 'Unknown',
+            'parentName' => $meeting->parent?->name ?? 'Unknown',
+            'staffIds' => $meeting->staff->pluck('id')->all(),
+            'studentIds' => $meeting->students->pluck('id')->all(),
+            'staffNames' => $staffNames,
+            'studentNames' => $studentNames,
+            'teacherName' => $staffNames[0] ?? 'Unknown',
+            'studentName' => $studentNames[0] ?? 'Unknown',
         ]);
     }
 }

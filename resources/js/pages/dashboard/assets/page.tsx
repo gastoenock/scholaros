@@ -27,6 +27,7 @@ import {
 } from "lucide-react";
 import { motion } from "motion/react";
 import { toast } from "sonner";
+import { routerDeleteWithConfirm } from "@/lib/confirm.ts";
 import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription, EmptyContent } from "@/components/ui/empty.tsx";
 
 type Asset = {
@@ -89,9 +90,9 @@ function AssetsInner({ assets: allAssets, stats }: PageProps) {
     return filtered;
   }, [allAssets, search, categoryFilter, statusFilter]);
 
-  const handleDelete = (id: number) => {
-    router.delete(`/dashboard/assets/${id}`, {
-      preserveScroll: true,
+  const handleDelete = async (id: number) => {
+    await routerDeleteWithConfirm(`/dashboard/assets/${id}`, {
+      title: "Delete this asset?",
       onSuccess: () => toast.success("Asset deleted"),
       onError: () => toast.error("Failed to delete asset"),
     });

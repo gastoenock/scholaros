@@ -19,7 +19,7 @@ abstract class Controller
     {
         $id = $this->schoolId();
 
-        return $id ? School::find($id) : null;
+        return $id ? School::with('branches')->find($id) : null;
     }
 
     /**

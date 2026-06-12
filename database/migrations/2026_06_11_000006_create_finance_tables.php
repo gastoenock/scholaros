@@ -23,6 +23,7 @@ return new class extends Migration
             $table->unsignedInteger('total_copies')->default(1);
             $table->unsignedInteger('available_copies')->default(1);
             $table->timestamps();
+            $table->softDeletes();
         });
 
         Schema::create('library_issuances', function (Blueprint $table) {
@@ -37,6 +38,7 @@ return new class extends Migration
             $table->string('returned_at')->nullable();
             $table->string('status')->default('issued');
             $table->timestamps();
+            $table->softDeletes();
         });
 
         Schema::create('fee_structures', function (Blueprint $table) {
@@ -48,6 +50,7 @@ return new class extends Migration
             $table->json('items');
             $table->decimal('total_amount', 12, 2);
             $table->timestamps();
+            $table->softDeletes();
 
             $table->index(['school_id', 'academic_year']);
         });
@@ -68,6 +71,7 @@ return new class extends Migration
             $table->foreignId('recorded_by')->nullable()->constrained('users')->nullOnDelete();
             $table->text('notes')->nullable();
             $table->timestamps();
+            $table->softDeletes();
 
             $table->index(['school_id', 'academic_year']);
         });
@@ -81,11 +85,84 @@ return new class extends Migration
             $table->string('date');
             $table->string('vendor')->nullable();
             $table->string('receipt_url')->nullable();
+            $table->string('payment_method')->default('cash');
+            $table->string('reference_number')->nullable();
             $table->foreignId('approved_by')->nullable()->constrained('users')->nullOnDelete();
             $table->string('status')->default('pending');
             $table->timestamps();
+            $table->softDeletes();
 
             $table->index(['school_id', 'date']);
+        });
+
+        Schema::create('chart_of_accounts', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('school_id')->constrained('schools')->cascadeOnDelete();
+            $table->string('code');
+            $table->string('name');
+            $table->string('account_type');
+            $table->string('normal_balance');
+            $table->string('ifrs_category')->nullable();
+            $table->foreignId('parent_id')->nullable()->constrained('chart_of_accounts')->nullOnDelete();
+            $table->boolean('is_active')->default(true);
+            $table->timestamps();
+            $table->softDeletes();
+
+            $table->unique(['school_id', 'code']);
+        });
+
+        Schema::create('journal_entries', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('school_id')->constrained('schools')->cascadeOnDelete();
+            $table->string('entry_number');
+            $table->string('entry_date');
+            $table->text('description');
+            $table->string('reference_type')->nullable();
+            $table->unsignedBigInteger('reference_id')->nullable();
+            $table->string('status')->default('posted');
+            $table->foreignId('created_by')->nullable()->constrained('users')->nullOnDelete();
+            $table->timestamps();
+            $table->softDeletes();
+
+            $table->index(['school_id', 'entry_date']);
+        });
+
+        Schema::create('journal_entry_lines', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('journal_entry_id')->constrained('journal_entries')->cascadeOnDelete();
+            $table->foreignId('account_id')->constrained('chart_of_accounts')->cascadeOnDelete();
+            $table->decimal('debit', 12, 2)->default(0);
+            $table->decimal('credit', 12, 2)->default(0);
+            $table->string('line_description')->nullable();
+            $table->timestamps();
+        });
+
+        Schema::create('petty_cash_funds', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('school_id')->constrained('schools')->cascadeOnDelete();
+            $table->string('name');
+            $table->foreignId('custodian_id')->nullable()->constrained('users')->nullOnDelete();
+            $table->decimal('float_amount', 12, 2);
+            $table->decimal('current_balance', 12, 2);
+            $table->timestamps();
+            $table->softDeletes();
+        });
+
+        Schema::create('petty_cash_transactions', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('school_id')->constrained('schools')->cascadeOnDelete();
+            $table->foreignId('petty_cash_fund_id')->constrained('petty_cash_funds')->cascadeOnDelete();
+            $table->foreignId('expense_id')->nullable()->constrained('expenses')->nullOnDelete();
+            $table->string('transaction_date');
+            $table->string('voucher_number');
+            $table->text('description');
+            $table->decimal('amount', 12, 2);
+            $table->string('transaction_type');
+            $table->foreignId('recorded_by')->nullable()->constrained('users')->nullOnDelete();
+            $table->timestamps();
+            $table->softDeletes();
+
+            $table->index(['school_id', 'transaction_date']);
         });
 
         Schema::create('payroll_records', function (Blueprint $table) {
@@ -102,6 +179,7 @@ return new class extends Migration
             $table->string('status')->default('pending');
             $table->text('notes')->nullable();
             $table->timestamps();
+            $table->softDeletes();
 
             $table->index(['school_id', 'year', 'month']);
         });
@@ -117,6 +195,7 @@ return new class extends Migration
             $table->string('status')->default('pending')->index();
             $table->foreignId('approved_by')->nullable()->constrained('users')->nullOnDelete();
             $table->timestamps();
+            $table->softDeletes();
         });
     }
 
@@ -124,6 +203,11 @@ return new class extends Migration
     {
         Schema::dropIfExists('leave_requests');
         Schema::dropIfExists('payroll_records');
+        Schema::dropIfExists('petty_cash_transactions');
+        Schema::dropIfExists('petty_cash_funds');
+        Schema::dropIfExists('journal_entry_lines');
+        Schema::dropIfExists('journal_entries');
+        Schema::dropIfExists('chart_of_accounts');
         Schema::dropIfExists('expenses');
         Schema::dropIfExists('fee_payments');
         Schema::dropIfExists('fee_structures');

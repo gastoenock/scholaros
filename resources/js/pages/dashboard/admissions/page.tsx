@@ -36,7 +36,7 @@ type AdmissionStatus =
 export type Admission = {
   id: number;
   schoolId: number;
-  branchId?: string | null;
+  schoolBranchId?: number | null;
   applicationId: string;
   firstName: string;
   lastName: string;

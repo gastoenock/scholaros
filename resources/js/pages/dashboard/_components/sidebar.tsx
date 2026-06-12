@@ -56,6 +56,7 @@ const navItems: NavItem[] = [
   { label: "Timetable", href: "/dashboard/timetable", icon: Calendar, roles: ["admin", "teacher", "student", "superadmin"] },
   { label: "Academics", href: "/dashboard/academics", icon: BookOpen, roles: ["admin", "teacher", "student", "parent", "superadmin"] },
   { label: "Meetings", href: "/dashboard/meetings", icon: Handshake, roles: ["admin", "teacher", "parent", "superadmin"] },
+  { label: "Events", href: "/dashboard/events", icon: Calendar, roles: ["admin", "teacher", "superadmin"] },
   { label: "Finance", href: "/dashboard/finance", icon: CreditCard, roles: ["admin", "parent", "superadmin"] },
   { label: "Payroll & HR", href: "/dashboard/payroll", icon: Users, roles: ["admin", "superadmin"] },
   { label: "Transport", href: "/dashboard/transport", icon: Bus, roles: ["admin", "parent", "superadmin"] },

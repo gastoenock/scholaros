@@ -14,11 +14,15 @@ use App\Models\ExamResult;
 use App\Models\Expense;
 use App\Models\FeePayment;
 use App\Models\FeeStructure;
+use App\Models\Event;
+use App\Models\Meeting;
+use App\Models\Message;
 use App\Models\LeaveRequest;
 use App\Models\LibraryBook;
 use App\Models\MaintenanceRequest;
 use App\Models\PayrollRecord;
 use App\Models\School;
+use App\Models\SchoolBranch;
 use App\Models\SchoolClass;
 use App\Models\SecurityLog;
 use App\Models\Staff;
@@ -26,6 +30,7 @@ use App\Models\Student;
 use App\Models\Subject;
 use App\Models\TimetableSlot;
 use App\Models\User;
+use App\Services\AccountingService;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
 
@@ -53,11 +58,30 @@ class DatabaseSeeder extends Seeder
             'website' => 'https://abama.edu.gh',
             'is_active' => true,
             'plan' => 'premium',
-            'branches' => [
-                ['id' => 'ABAMA_A', 'name' => 'ABAMA Campus A', 'address' => '15 Education Drive, East Legon', 'phone' => '+233 302 111 333', 'principalName' => 'Dr. Kwame Mensah'],
-                ['id' => 'ABAMA_B', 'name' => 'ABAMA Campus B', 'address' => '42 Academy Road, Cantonments', 'phone' => '+233 302 111 444', 'principalName' => 'Mrs. Ama Darko'],
-            ],
         ]);
+
+        $branchA = SchoolBranch::create([
+            'school_id' => $school->id,
+            'code' => 'ABAMA_A',
+            'name' => 'ABAMA Campus A',
+            'address' => '15 Education Drive, East Legon',
+            'phone' => '+233 302 111 333',
+            'principal_name' => 'Dr. Kwame Mensah',
+        ]);
+
+        $branchB = SchoolBranch::create([
+            'school_id' => $school->id,
+            'code' => 'ABAMA_B',
+            'name' => 'ABAMA Campus B',
+            'address' => '42 Academy Road, Cantonments',
+            'phone' => '+233 302 111 444',
+            'principal_name' => 'Mrs. Ama Darko',
+        ]);
+
+        $branchIds = [
+            'ABAMA_A' => $branchA->id,
+            'ABAMA_B' => $branchB->id,
+        ];
 
         $admin = User::create([
             'name' => 'ABAMA Admin',
@@ -101,7 +125,7 @@ class DatabaseSeeder extends Seeder
         foreach ($staffData as [$first, $last, $staffId, $branch, $role, $dept, $designation, $email, $phone, $salary, $gender, $qualification, $subjects, $joinDate]) {
             $staff = Staff::create([
                 'school_id' => $school->id,
-                'branch_id' => $branch,
+                'school_branch_id' => $branchIds[$branch],
                 'first_name' => $first,
                 'last_name' => $last,
                 'staff_id' => $staffId,
@@ -119,6 +143,24 @@ class DatabaseSeeder extends Seeder
             ]);
             $staffIds[$staffId] = $staff->id;
             $staffSalaries[$staffId] = $salary;
+        }
+
+        $staffUsers = [];
+        foreach ([
+            ['Akosua Boateng', 'a.boateng@abama.edu.gh', 'teacher'],
+            ['Yaw Owusu', 'y.owusu@abama.edu.gh', 'teacher'],
+            ['Abena Asante', 'a.asante@abama.edu.gh', 'teacher'],
+            ['Kofi Adjei', 'k.adjei@abama.edu.gh', 'teacher'],
+            ['Esi Nyarko', 'e.nyarko@abama.edu.gh', 'admin_staff'],
+        ] as [$name, $email, $role]) {
+            $staffUsers[] = User::create([
+                'name' => $name,
+                'email' => $email,
+                'password' => Hash::make('password'),
+                'role' => $role,
+                'school_id' => $school->id,
+                'is_active' => true,
+            ]);
         }
 
         // ─── Classes ─────────────────────────────────────────────
@@ -139,7 +181,7 @@ class DatabaseSeeder extends Seeder
         foreach ($classesData as [$name, $grade, $section, $branch, $room, $capacity, $teacherKey]) {
             $class = SchoolClass::create([
                 'school_id' => $school->id,
-                'branch_id' => $branch,
+                'school_branch_id' => $branchIds[$branch],
                 'name' => $name,
                 'grade_level' => $grade,
                 'section' => $section,
@@ -197,7 +239,7 @@ class DatabaseSeeder extends Seeder
             $dob = sprintf('200%d-%02d-%02d', rand(8, 10) % 10, rand(1, 12), rand(1, 28));
             $student = Student::create([
                 'school_id' => $school->id,
-                'branch_id' => $branch,
+                'school_branch_id' => $branchIds[$branch],
                 'first_name' => $first,
                 'last_name' => $last,
                 'date_of_birth' => $dob,
@@ -491,7 +533,7 @@ class DatabaseSeeder extends Seeder
         foreach ($admissions as [$first, $last, $gender, $grade, $gName, $gEmail, $gPhone, $status, $appId, $branch]) {
             Admission::create([
                 'school_id' => $school->id,
-                'branch_id' => $branch,
+                'school_branch_id' => $branchIds[$branch],
                 'first_name' => $first,
                 'last_name' => $last,
                 'gender' => $gender,
@@ -670,6 +712,148 @@ class DatabaseSeeder extends Seeder
             'check_out_time' => '2026-06-02T11:45:00Z',
             'id_type' => 'Company Badge',
         ]);
+
+        Event::create([
+            'school_id' => $school->id,
+            'school_branch_id' => $branchA->id,
+            'title' => 'Inter-House Sports Day',
+            'description' => 'Annual sports competition for all grade levels',
+            'start_at' => '2026-06-15T08:00:00Z',
+            'end_at' => '2026-06-15T16:00:00Z',
+            'location' => 'ABAMA Campus A Sports Field',
+            'event_type' => 'sports',
+            'status' => 'scheduled',
+            'created_by' => $admin->id,
+        ]);
+
+        Event::create([
+            'school_id' => $school->id,
+            'school_branch_id' => $branchB->id,
+            'title' => 'Science Fair',
+            'description' => 'Student science projects exhibition',
+            'start_at' => '2026-07-02T09:00:00Z',
+            'end_at' => '2026-07-02T14:00:00Z',
+            'location' => 'ABAMA Campus B Auditorium',
+            'event_type' => 'academic',
+            'status' => 'scheduled',
+            'created_by' => $admin->id,
+        ]);
+
+        $sampleMeeting = Meeting::create([
+            'school_id' => $school->id,
+            'parent_id' => $admin->id,
+            'title' => 'End of Term Progress Review',
+            'description' => 'Discuss academic performance and next term goals',
+            'scheduled_at' => '2026-06-20T10:00:00Z',
+            'duration_minutes' => 45,
+            'status' => 'requested',
+            'meeting_type' => 'in_person',
+            'location' => 'Room A201',
+        ]);
+        $sampleMeeting->staff()->attach([$staffIds['STF-A002'], $staffIds['STF-A004']]);
+        $sampleMeeting->students()->attach(array_slice(array_values($studentIds), 0, 2));
+
+        // ─── Messages ────────────────────────────────────────────
+        $akosua = $staffUsers[0];
+        $yaw = $staffUsers[1];
+        $abena = $staffUsers[2];
+        $kofi = $staffUsers[3];
+
+        Message::create([
+            'school_id' => $school->id,
+            'sender_id' => $akosua->id,
+            'receiver_id' => $admin->id,
+            'body' => 'Good morning! The Grade 8 math exam papers are ready for review.',
+            'is_read' => false,
+            'created_at' => now()->subDays(1)->setTime(12, 42),
+        ]);
+
+        Message::create([
+            'school_id' => $school->id,
+            'sender_id' => $admin->id,
+            'receiver_id' => $akosua->id,
+            'body' => 'Thanks Akosua. Please share them with the exam committee.',
+            'is_read' => true,
+            'created_at' => now()->subDays(1)->setTime(12, 55),
+        ]);
+
+        Message::create([
+            'school_id' => $school->id,
+            'sender_id' => $akosua->id,
+            'receiver_id' => $admin->id,
+            'body' => 'Will do. Also, should we reschedule the mock exam?',
+            'is_read' => false,
+            'created_at' => now()->subDays(1)->setTime(13, 10),
+        ]);
+
+        Message::create([
+            'school_id' => $school->id,
+            'sender_id' => $yaw->id,
+            'receiver_id' => $admin->id,
+            'body' => 'Lab equipment for the physics practical has arrived.',
+            'is_read' => false,
+            'created_at' => now()->subHours(5),
+        ]);
+
+        Message::create([
+            'school_id' => $school->id,
+            'sender_id' => $admin->id,
+            'receiver_id' => $yaw->id,
+            'body' => 'Great news! Let me know if anything is missing.',
+            'is_read' => true,
+            'created_at' => now()->subHours(4)->subMinutes(30),
+        ]);
+
+        Message::create([
+            'school_id' => $school->id,
+            'sender_id' => $abena->id,
+            'receiver_id' => $admin->id,
+            'body' => 'Parent-teacher conference slots are filling up fast.',
+            'is_read' => true,
+            'created_at' => now()->subDays(2)->setTime(9, 15),
+        ]);
+
+        Message::create([
+            'school_id' => $school->id,
+            'sender_id' => $admin->id,
+            'receiver_id' => $abena->id,
+            'body' => 'Please send me the updated schedule by Friday.',
+            'is_read' => true,
+            'created_at' => now()->subDays(2)->setTime(10, 0),
+        ]);
+
+        Message::create([
+            'school_id' => $school->id,
+            'sender_id' => $abena->id,
+            'receiver_id' => $admin->id,
+            'body' => 'Here is the draft schedule. Let me know your thoughts!',
+            'is_read' => false,
+            'created_at' => now()->subHours(2),
+        ]);
+
+        Message::create([
+            'school_id' => $school->id,
+            'sender_id' => $admin->id,
+            'receiver_id' => $kofi->id,
+            'body' => 'Can you prepare the ICT lab for the coding workshop next week?',
+            'is_read' => true,
+            'created_at' => now()->subDays(3)->setTime(14, 30),
+        ]);
+
+        Message::create([
+            'school_id' => $school->id,
+            'sender_id' => $kofi->id,
+            'receiver_id' => $admin->id,
+            'body' => 'Already on it! 💻✨',
+            'is_read' => true,
+            'created_at' => now()->subDays(3)->setTime(15, 0),
+        ]);
+
+        $accounting = app(AccountingService::class);
+        $accounting->ensureChartOfAccounts($school->id);
+        $accounting->ensurePettyCashFund($school->id, $admin->id);
+        FeePayment::forSchool($school->id)->each(fn (FeePayment $p) => $accounting->postFeePayment($p));
+        Expense::forSchool($school->id)->where('status', 'approved')->each(fn (Expense $e) => $accounting->postExpense($e));
 
         $this->command->info('Seeded ABAMA International Schools demo data.');
         $this->command->info('Login: admin@abama.edu.gh / password (admin) or superadmin@scholaros.test / password (superadmin)');

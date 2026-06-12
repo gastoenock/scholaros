@@ -21,6 +21,7 @@ return new class extends Migration
             $table->string('type')->default('homework');
             $table->string('attachment_url')->nullable();
             $table->timestamps();
+            $table->softDeletes();
         });
 
         Schema::create('submissions', function (Blueprint $table) {
@@ -33,6 +34,7 @@ return new class extends Migration
             $table->text('feedback')->nullable();
             $table->string('status')->default('pending');
             $table->timestamps();
+            $table->softDeletes();
         });
 
         Schema::create('exams', function (Blueprint $table) {
@@ -50,6 +52,7 @@ return new class extends Migration
             $table->string('academic_year');
             $table->string('venue')->nullable();
             $table->timestamps();
+            $table->softDeletes();
         });
 
         Schema::create('exam_results', function (Blueprint $table) {
@@ -61,6 +64,7 @@ return new class extends Migration
             $table->string('grade')->nullable();
             $table->text('remarks')->nullable();
             $table->timestamps();
+            $table->softDeletes();
         });
 
         Schema::create('online_classes', function (Blueprint $table) {
@@ -79,6 +83,7 @@ return new class extends Migration
             $table->json('recurring_days')->nullable();
             $table->string('status')->default('scheduled');
             $table->timestamps();
+            $table->softDeletes();
         });
     }
 

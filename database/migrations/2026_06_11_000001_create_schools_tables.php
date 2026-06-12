@@ -23,8 +23,23 @@ return new class extends Migration
             $table->foreignId('admin_id')->nullable()->constrained('users')->nullOnDelete();
             $table->boolean('is_active')->default(true);
             $table->string('plan')->default('trial');
-            $table->json('branches')->nullable();
             $table->timestamps();
+            $table->softDeletes();
+        });
+
+        Schema::create('school_branches', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('school_id')->constrained('schools')->cascadeOnDelete();
+            $table->string('code')->nullable();
+            $table->string('name');
+            $table->string('address')->nullable();
+            $table->string('phone')->nullable();
+            $table->string('principal_name')->nullable();
+            $table->boolean('is_active')->default(true);
+            $table->timestamps();
+            $table->softDeletes();
+
+            $table->unique(['school_id', 'code']);
         });
 
         Schema::create('school_applications', function (Blueprint $table) {
@@ -39,12 +54,14 @@ return new class extends Migration
             $table->string('zip')->nullable();
             $table->string('status')->default('pending')->index();
             $table->timestamps();
+            $table->softDeletes();
         });
     }
 
     public function down(): void
     {
         Schema::dropIfExists('school_applications');
+        Schema::dropIfExists('school_branches');
         Schema::dropIfExists('schools');
     }
 };

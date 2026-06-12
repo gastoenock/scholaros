@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label.tsx";
 import { Textarea } from "@/components/ui/textarea.tsx";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select.tsx";
 import { toast } from "sonner";
+import { routerDeleteWithConfirm } from "@/lib/confirm.ts";
 import { motion } from "motion/react";
 import {
   BookOpen, Plus, Pencil, Trash2, ClipboardList, Video,
@@ -79,9 +80,11 @@ function SubjectsTab({ subjects, staff }: Pick<PageProps, "subjects" | "staff">)
     }
   };
 
-  const handleDelete = (id: number) => {
-    if (!confirm("Delete this subject?")) return;
-    router.delete(`/dashboard/academics/subjects/${id}`, { preserveScroll: true, onSuccess: () => toast.success("Subject removed") });
+  const handleDelete = async (id: number) => {
+    await routerDeleteWithConfirm(`/dashboard/academics/subjects/${id}`, {
+      title: "Delete this subject?",
+      onSuccess: () => toast.success("Subject removed"),
+    });
   };
 
   const openEdit = (s: Subject) => {
@@ -225,7 +228,7 @@ function AssignmentsTab({ assignments, classes, subjects, staff, submissions }: 
                       <Button size="sm" variant="secondary" onClick={() => { setSelectedAssignment(a.id); setGradingOpen(true); }} className="cursor-pointer">
                         <ClipboardList className="h-3.5 w-3.5 mr-1" /> Grade
                       </Button>
-                      <button onClick={() => router.delete(`/dashboard/academics/assignments/${a.id}`, { preserveScroll: true })} className="p-1.5 rounded hover:bg-red-50 hover:text-red-600 cursor-pointer"><Trash2 className="h-3.5 w-3.5" /></button>
+                      <button onClick={() => void routerDeleteWithConfirm(`/dashboard/academics/assignments/${a.id}`, { title: "Delete this assignment?" })} className="p-1.5 rounded hover:bg-red-50 hover:text-red-600 cursor-pointer"><Trash2 className="h-3.5 w-3.5" /></button>
                     </div>
                   </div>
                 </CardContent>
@@ -390,7 +393,7 @@ function ExamsTab({ exams, classes, subjects, students, examResults }: Pick<Page
                       <Button size="sm" variant="secondary" onClick={() => { setSelectedExam(e); setResultScores({}); setResultsOpen(true); }} className="cursor-pointer">
                         <ClipboardList className="h-3.5 w-3.5 mr-1" />Results
                       </Button>
-                      <button onClick={() => router.delete(`/dashboard/academics/exams/${e.id}`, { preserveScroll: true })} className="p-1.5 rounded hover:bg-red-50 hover:text-red-600 cursor-pointer"><Trash2 className="h-3.5 w-3.5" /></button>
+                      <button onClick={() => void routerDeleteWithConfirm(`/dashboard/academics/exams/${e.id}`, { title: "Delete this exam?" })} className="p-1.5 rounded hover:bg-red-50 hover:text-red-600 cursor-pointer"><Trash2 className="h-3.5 w-3.5" /></button>
                     </div>
                   </div>
                 </CardContent>
@@ -529,7 +532,7 @@ function OnlineClassesTab({ onlineClasses, classes, subjects, staff }: Pick<Page
                       {oc.status === "scheduled" && (
                         <Button size="sm" variant="secondary" onClick={() => router.put(`/dashboard/academics/online-classes/${oc.id}`, { status: "live" }, { preserveScroll: true })} className="cursor-pointer">Go Live</Button>
                       )}
-                      <button onClick={() => router.delete(`/dashboard/academics/online-classes/${oc.id}`, { preserveScroll: true })} className="p-1.5 rounded hover:bg-red-50 hover:text-red-600 cursor-pointer"><Trash2 className="h-3.5 w-3.5" /></button>
+                      <button onClick={() => void routerDeleteWithConfirm(`/dashboard/academics/online-classes/${oc.id}`, { title: "Delete this online class?" })} className="p-1.5 rounded hover:bg-red-50 hover:text-red-600 cursor-pointer"><Trash2 className="h-3.5 w-3.5" /></button>
                     </div>
                   </div>
                 </CardContent>

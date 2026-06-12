@@ -13,12 +13,13 @@ import { toast } from "sonner";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { nanoid } from "nanoid";
 import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription, EmptyContent } from "@/components/ui/empty.tsx";
+import { routerDeleteWithConfirm } from "@/lib/confirm.ts";
 import type { Branch, School } from "@/lib/types.ts";
 
 const branchSchema = z.object({
   name: z.string().min(1, "Branch name required"),
+  code: z.string().optional(),
   address: z.string().optional(),
   phone: z.string().optional(),
   principalName: z.string().optional(),
@@ -30,21 +31,28 @@ function BranchDialog({
   onClose,
   onSave,
   editBranch,
+  submitting,
 }: {
   open: boolean;
   onClose: () => void;
-  onSave: (data: BranchFormData & { id: string }) => void;
+  onSave: (data: BranchFormData) => void;
   editBranch?: Branch | null;
+  submitting: boolean;
 }) {
   const { register, handleSubmit, formState: { errors }, reset } = useForm<BranchFormData>({
     resolver: zodResolver(branchSchema),
-    defaultValues: editBranch ?? {},
+    defaultValues: editBranch ? {
+      name: editBranch.name,
+      code: editBranch.code ?? undefined,
+      address: editBranch.address ?? undefined,
+      phone: editBranch.phone ?? undefined,
+      principalName: editBranch.principalName ?? undefined,
+    } : {},
   });
 
   const onSubmit = (data: BranchFormData) => {
-    onSave({ ...data, id: editBranch?.id ?? nanoid() });
+    onSave(data);
     reset();
-    onClose();
   };
 
   return (
@@ -61,19 +69,25 @@ function BranchDialog({
             {errors.name && <p className="text-destructive text-xs mt-1">{errors.name.message}</p>}
           </div>
           <div>
+            <Label className="mb-1.5 block">Branch Code</Label>
+            <Input placeholder="CAMPUS_A" {...register("code")} />
+          </div>
+          <div>
             <Label className="mb-1.5 block">Address</Label>
-            <Input placeholder="123 Campus Drive, Philadelphia, PA" {...register("address")} />
+            <Input placeholder="123 Campus Drive" {...register("address")} />
           </div>
           <div>
             <Label className="mb-1.5 block">Phone</Label>
-            <Input placeholder="(215) 555-0100" {...register("phone")} />
+            <Input placeholder="+233 302 111 222" {...register("phone")} />
           </div>
           <div>
             <Label className="mb-1.5 block">Principal / Head Name</Label>
             <Input placeholder="Dr. Jane Smith" {...register("principalName")} />
           </div>
           <div className="flex gap-3 pt-2">
-            <Button type="submit" className="cursor-pointer flex-1">Save Branch</Button>
+            <Button type="submit" disabled={submitting} className="cursor-pointer flex-1">
+              {submitting ? "Saving..." : "Save Branch"}
+            </Button>
             <Button type="button" variant="secondary" onClick={onClose} className="cursor-pointer">Cancel</Button>
           </div>
         </form>
@@ -159,31 +173,38 @@ function SchoolSettingsCard({ school }: { school: School }) {
   );
 }
 
-function BranchesCard({ school }: { school: School }) {
+function BranchesCard({ branches }: { branches: Branch[] }) {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editBranch, setEditBranch] = useState<Branch | null>(null);
-  const branches: Branch[] = school.branches ?? [];
+  const [submitting, setSubmitting] = useState(false);
 
-  const saveBranches = (updated: Branch[], successMessage: string, errorMessage: string) => {
-    router.put("/dashboard/campus/school", { branches: updated }, {
+  const handleSave = (data: BranchFormData) => {
+    setSubmitting(true);
+    const options = {
       preserveScroll: true,
-      onSuccess: () => toast.success(successMessage),
-      onError: () => toast.error(errorMessage),
+      onSuccess: () => {
+        toast.success(editBranch ? "Branch updated!" : "Branch added!");
+        setDialogOpen(false);
+        setEditBranch(null);
+      },
+      onError: () => toast.error("Failed to save branch"),
+      onFinish: () => setSubmitting(false),
+    };
+
+    if (editBranch) {
+      router.put(`/dashboard/campus/branches/${editBranch.id}`, data, options);
+    } else {
+      router.post("/dashboard/campus/branches", data, options);
+    }
+  };
+
+  const handleDelete = async (branch: Branch) => {
+    await routerDeleteWithConfirm(`/dashboard/campus/branches/${branch.id}`, {
+      title: "Delete this branch?",
+      text: `"${branch.name}" will be soft-deleted.`,
+      onSuccess: () => toast.success("Branch removed"),
+      onError: () => toast.error("Failed to remove branch"),
     });
-  };
-
-  const handleSave = (data: BranchFormData & { id: string }) => {
-    const existing = branches.find((b) => b.id === data.id);
-    const updated = existing
-      ? branches.map((b) => (b.id === data.id ? { ...b, ...data } : b))
-      : [...branches, data];
-    saveBranches(updated, existing ? "Branch updated!" : "Branch added!", "Failed to save branch");
-  };
-
-  const handleDelete = (id: string) => {
-    if (!confirm("Delete this branch?")) return;
-    const updated = branches.filter((b) => b.id !== id);
-    saveBranches(updated, "Branch removed", "Failed to remove branch");
   };
 
   return (
@@ -219,19 +240,16 @@ function BranchesCard({ school }: { school: School }) {
                     <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
                       <Building2 className="h-4 w-4 text-primary" />
                     </div>
-                    <span className="font-semibold text-sm">{branch.name}</span>
+                    <div>
+                      <span className="font-semibold text-sm">{branch.name}</span>
+                      {branch.code && <p className="text-xs text-muted-foreground font-mono">{branch.code}</p>}
+                    </div>
                   </div>
                   <div className="flex gap-1">
-                    <Button
-                      variant="ghost" size="sm" className="h-7 w-7 p-0 cursor-pointer"
-                      onClick={() => { setEditBranch(branch); setDialogOpen(true); }}
-                    >
+                    <Button variant="ghost" size="sm" className="h-7 w-7 p-0 cursor-pointer" onClick={() => { setEditBranch(branch); setDialogOpen(true); }}>
                       <Pencil className="h-3.5 w-3.5" />
                     </Button>
-                    <Button
-                      variant="ghost" size="sm" className="h-7 w-7 p-0 cursor-pointer text-destructive"
-                      onClick={() => handleDelete(branch.id)}
-                    >
+                    <Button variant="ghost" size="sm" className="h-7 w-7 p-0 cursor-pointer text-destructive" onClick={() => handleDelete(branch)}>
                       <Trash2 className="h-3.5 w-3.5" />
                     </Button>
                   </div>
@@ -252,6 +270,7 @@ function BranchesCard({ school }: { school: School }) {
         onClose={() => { setDialogOpen(false); setEditBranch(null); }}
         onSave={handleSave}
         editBranch={editBranch}
+        submitting={submitting}
       />
     </Card>
   );
@@ -259,6 +278,7 @@ function BranchesCard({ school }: { school: School }) {
 
 function CampusContent({ school }: PageProps) {
   const { schoolId } = useCurrentSchool();
+  const branches = school?.branches ?? [];
 
   if (!schoolId || !school) {
     return <div className="text-muted-foreground text-center py-20">No school linked to your account.</div>;
@@ -285,7 +305,7 @@ function CampusContent({ school }: PageProps) {
         </div>
       </div>
       <SchoolSettingsCard school={school} />
-      <BranchesCard school={school} />
+      <BranchesCard branches={branches} />
     </div>
   );
 }

@@ -18,6 +18,7 @@ return new class extends Migration
             $table->string('afternoon_start_time')->nullable();
             $table->boolean('is_active')->default(true);
             $table->timestamps();
+            $table->softDeletes();
         });
 
         Schema::create('buses', function (Blueprint $table) {
@@ -37,6 +38,7 @@ return new class extends Migration
             $table->string('last_location_update')->nullable();
             $table->string('status')->default('active');
             $table->timestamps();
+            $table->softDeletes();
         });
 
         Schema::create('transport_assignments', function (Blueprint $table) {
@@ -50,6 +52,7 @@ return new class extends Migration
             $table->string('academic_year');
             $table->boolean('is_active')->default(true);
             $table->timestamps();
+            $table->softDeletes();
         });
 
         Schema::create('dorm_rooms', function (Blueprint $table) {
@@ -66,6 +69,7 @@ return new class extends Migration
             $table->string('status')->default('available');
             $table->decimal('monthly_fee', 12, 2)->nullable();
             $table->timestamps();
+            $table->softDeletes();
 
             $table->index(['school_id', 'status']);
         });
@@ -81,6 +85,7 @@ return new class extends Migration
             $table->string('bed_number')->nullable();
             $table->string('status')->default('active');
             $table->timestamps();
+            $table->softDeletes();
         });
 
         Schema::create('maintenance_requests', function (Blueprint $table) {
@@ -96,6 +101,7 @@ return new class extends Migration
             $table->string('status')->default('open');
             $table->string('resolved_at')->nullable();
             $table->timestamps();
+            $table->softDeletes();
 
             $table->index(['school_id', 'status']);
         });
@@ -113,6 +119,7 @@ return new class extends Migration
             $table->string('id_number')->nullable();
             $table->foreignId('logged_by')->nullable()->constrained('users')->nullOnDelete();
             $table->timestamps();
+            $table->softDeletes();
 
             $table->index(['school_id', 'check_in_time']);
         });

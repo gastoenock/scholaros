@@ -11,11 +11,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs.tsx";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog.tsx";
 import { toast } from "sonner";
+import { routerDeleteWithConfirm } from "@/lib/confirm.ts";
 import { cn } from "@/lib/utils.ts";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from "recharts";
 import {
   DollarSign, TrendingUp, TrendingDown, Plus, Receipt,
-  AlertCircle, Clock, CheckCircle, Trash2,
+  AlertCircle, Clock, CheckCircle, Trash2, BookOpen, Scale, FileSpreadsheet, Wallet,
 } from "lucide-react";
 
 const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
@@ -65,6 +66,7 @@ type Expense = {
   amount: number;
   date: string;
   vendor?: string | null;
+  paymentMethod?: string | null;
   status: string;
   createdAt: string;
 };
@@ -83,18 +85,45 @@ type Summary = {
   byMonth: Record<string, { income: number; expenses: number }>;
 };
 
+type AccountingReport = {
+  cashBook: {
+    openingBalance: number;
+    closingBalance: number;
+    entries: { date: string; entryNumber: string; description: string; debit: number; credit: number; balance: number }[];
+  };
+  pettyCashBook: { date: string; voucherNumber: string; description: string; type: string; amount: number }[];
+  trialBalance: {
+    accounts: { code: string; name: string; accountType: string; ifrsCategory?: string | null; debit: number; credit: number }[];
+    totalDebits: number;
+    totalCredits: number;
+    isBalanced: boolean;
+  };
+  balanceSheet: {
+    assets: { code: string; name: string; amount: number; ifrsCategory?: string | null }[];
+    liabilities: { code: string; name: string; amount: number; ifrsCategory?: string | null }[];
+    equity: { code: string; name: string; amount: number; ifrsCategory?: string | null }[];
+    totalAssets: number;
+    totalLiabilities: number;
+    totalEquity: number;
+  };
+  pettyCashFund?: { floatAmount: number; currentBalance: number; name: string } | null;
+};
+
 type PageProps = {
   academicYear: string;
+  reportAsOf: string;
   summary: Summary;
   payments: FeePayment[];
   expenses: Expense[];
   feeStructures: FeeStructure[];
   students: StudentOption[];
+  accounting: AccountingReport | null;
 };
 
-function FinanceContent({ academicYear, summary, payments, expenses, feeStructures, students }: PageProps) {
+function FinanceContent({ academicYear, reportAsOf, summary, payments, expenses, feeStructures, students, accounting }: PageProps) {
   const { schoolId } = useCurrentSchool();
   const [tab, setTab] = useState("overview");
+  const [reportTab, setReportTab] = useState("cash-book");
 
   // Dialogs
   const [paymentOpen, setPaymentOpen] = useState(false);
@@ -120,6 +149,7 @@ function FinanceContent({ academicYear, summary, payments, expenses, feeStructur
     amount: "",
     date: new Date().toISOString().slice(0, 10),
     vendor: "",
+    paymentMethod: "cash" as "cash" | "bank" | "petty_cash",
     status: "pending" as "pending" | "approved" | "rejected",
   });
 
@@ -167,13 +197,14 @@ function FinanceContent({ academicYear, summary, payments, expenses, feeStructur
       amount: parseFloat(expForm.amount),
       date: expForm.date,
       vendor: expForm.vendor || undefined,
+      paymentMethod: expForm.paymentMethod,
       status: expForm.status,
     }, {
       preserveScroll: true,
       onSuccess: () => {
         toast.success("Expense recorded");
         setExpenseOpen(false);
-        setExpForm({ category: "", description: "", amount: "", date: new Date().toISOString().slice(0, 10), vendor: "", status: "pending" });
+        setExpForm({ category: "", description: "", amount: "", date: new Date().toISOString().slice(0, 10), vendor: "", paymentMethod: "cash", status: "pending" });
       },
       onError: () => toast.error("Failed to record expense"),
     });
@@ -225,8 +256,8 @@ function FinanceContent({ academicYear, summary, payments, expenses, feeStructur
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-2xl font-bold">Finance & Fee Management</h1>
-          <p className="text-muted-foreground text-sm">Academic Year: {academicYear}</p>
+          <h1 className="text-2xl font-bold">Finance & Accounting</h1>
+          <p className="text-muted-foreground text-sm">Academic Year: {academicYear} · IFRS-aligned ledger · Reports as of {reportAsOf}</p>
         </div>
         <div className="flex gap-2 flex-wrap">
           <Dialog open={feeStructureOpen} onOpenChange={setFeeStructureOpen}>
@@ -281,6 +312,17 @@ function FinanceContent({ academicYear, summary, payments, expenses, feeStructur
                 <div><Label>Amount ($) *</Label><Input type="number" value={expForm.amount} onChange={(e) => setExpForm({ ...expForm, amount: e.target.value })} /></div>
                 <div><Label>Date *</Label><Input type="date" value={expForm.date} onChange={(e) => setExpForm({ ...expForm, date: e.target.value })} /></div>
                 <div><Label>Vendor</Label><Input value={expForm.vendor} onChange={(e) => setExpForm({ ...expForm, vendor: e.target.value })} placeholder="Vendor name (optional)" /></div>
+                <div>
+                  <Label>Payment Source</Label>
+                  <Select value={expForm.paymentMethod} onValueChange={(v) => setExpForm({ ...expForm, paymentMethod: v as typeof expForm.paymentMethod })}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="cash">Cash / Main Account</SelectItem>
+                      <SelectItem value="bank">Bank Transfer</SelectItem>
+                      <SelectItem value="petty_cash">Petty Cash</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
                 <div>
                   <Label>Status</Label>
                   <Select value={expForm.status} onValueChange={(v) => setExpForm({ ...expForm, status: v as "pending" | "approved" | "rejected" })}>
@@ -411,6 +453,7 @@ function FinanceContent({ academicYear, summary, payments, expenses, feeStructur
           <TabsTrigger value="payments" className="cursor-pointer">Payments</TabsTrigger>
           <TabsTrigger value="expenses" className="cursor-pointer">Expenses</TabsTrigger>
           <TabsTrigger value="fee-structures" className="cursor-pointer">Fee Structures</TabsTrigger>
+          <TabsTrigger value="accounting" className="cursor-pointer">Accounting</TabsTrigger>
         </TabsList>
 
         {/* Overview - Chart */}
@@ -470,7 +513,7 @@ function FinanceContent({ academicYear, summary, payments, expenses, feeStructur
                             <span className={cn("text-xs px-2 py-0.5 rounded-full font-medium capitalize", statusColor(p.status))}>{p.status}</span>
                           </td>
                           <td className="py-2">
-                            <Button variant="ghost" size="icon" className="cursor-pointer h-7 w-7 text-destructive" onClick={() => router.delete(`/dashboard/finance/payments/${p.id}`, { preserveScroll: true, onSuccess: () => toast.success("Deleted"), onError: () => toast.error("Failed to delete") })}>
+                            <Button variant="ghost" size="icon" className="cursor-pointer h-7 w-7 text-destructive" onClick={() => void routerDeleteWithConfirm(`/dashboard/finance/payments/${p.id}`, { title: "Delete this payment?", onSuccess: () => toast.success("Deleted"), onError: () => toast.error("Failed to delete") })}>
                               <Trash2 className="h-3.5 w-3.5" />
                             </Button>
                           </td>
@@ -523,11 +566,11 @@ function FinanceContent({ academicYear, summary, payments, expenses, feeStructur
                           </td>
                           <td className="py-2 flex gap-1">
                             {e.status === "pending" && (
-                              <Button variant="ghost" size="icon" className="cursor-pointer h-7 w-7 text-emerald-600" onClick={() => router.put(`/dashboard/finance/expenses/${e.id}/status`, { status: "approved" }, { preserveScroll: true, onSuccess: () => toast.success("Approved"), onError: () => toast.error("Failed to approve") })}>
+                              <Button variant="ghost" size="icon" className="cursor-pointer h-7 w-7 text-emerald-600" onClick={() => router.patch(`/dashboard/finance/expenses/${e.id}/status`, { status: "approved" }, { preserveScroll: true, onSuccess: () => toast.success("Approved"), onError: () => toast.error("Failed to approve") })}>
                                 <CheckCircle className="h-3.5 w-3.5" />
                               </Button>
                             )}
-                            <Button variant="ghost" size="icon" className="cursor-pointer h-7 w-7 text-destructive" onClick={() => router.delete(`/dashboard/finance/expenses/${e.id}`, { preserveScroll: true, onSuccess: () => toast.success("Deleted"), onError: () => toast.error("Failed to delete") })}>
+                            <Button variant="ghost" size="icon" className="cursor-pointer h-7 w-7 text-destructive" onClick={() => void routerDeleteWithConfirm(`/dashboard/finance/expenses/${e.id}`, { title: "Delete this expense?", onSuccess: () => toast.success("Deleted"), onError: () => toast.error("Failed to delete") })}>
                               <Trash2 className="h-3.5 w-3.5" />
                             </Button>
                           </td>
@@ -560,7 +603,7 @@ function FinanceContent({ academicYear, summary, payments, expenses, feeStructur
                       <CardTitle className="text-base">{fs.name}</CardTitle>
                       <p className="text-xs text-muted-foreground mt-0.5">Grade {fs.gradeLevel ?? "All"} · {fs.academicYear}</p>
                     </div>
-                    <Button variant="ghost" size="icon" className="cursor-pointer h-7 w-7 text-destructive" onClick={() => router.delete(`/dashboard/finance/fee-structures/${fs.id}`, { preserveScroll: true, onSuccess: () => toast.success("Deleted"), onError: () => toast.error("Failed to delete") })}>
+                    <Button variant="ghost" size="icon" className="cursor-pointer h-7 w-7 text-destructive" onClick={() => void routerDeleteWithConfirm(`/dashboard/finance/fee-structures/${fs.id}`, { title: "Delete this fee structure?", onSuccess: () => toast.success("Deleted"), onError: () => toast.error("Failed to delete") })}>
                       <Trash2 className="h-4 w-4" />
                     </Button>
                   </div>
@@ -582,6 +625,195 @@ function FinanceContent({ academicYear, summary, payments, expenses, feeStructur
               </Card>
             ))}
           </div>
+        </TabsContent>
+
+        {/* Accounting & IFRS Reports */}
+        <TabsContent value="accounting" className="mt-4 space-y-4">
+          {!accounting ? (
+            <Card><CardContent className="py-12 text-center text-muted-foreground">Accounting data unavailable.</CardContent></Card>
+          ) : (
+            <>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <Card>
+                  <CardContent className="pt-6 flex items-center gap-3">
+                    <Wallet className="h-8 w-8 text-blue-600" />
+                    <div>
+                      <p className="text-xs text-muted-foreground">Cash Book Balance</p>
+                      <p className="text-xl font-bold">${accounting.cashBook.closingBalance.toLocaleString()}</p>
+                    </div>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="pt-6 flex items-center gap-3">
+                    <BookOpen className="h-8 w-8 text-amber-600" />
+                    <div>
+                      <p className="text-xs text-muted-foreground">Petty Cash Float</p>
+                      <p className="text-xl font-bold">${(accounting.pettyCashFund?.currentBalance ?? 0).toLocaleString()}</p>
+                    </div>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="pt-6 flex items-center gap-3">
+                    <Scale className="h-8 w-8 text-emerald-600" />
+                    <div>
+                      <p className="text-xs text-muted-foreground">Trial Balance</p>
+                      <p className={cn("text-xl font-bold", accounting.trialBalance.isBalanced ? "text-emerald-600" : "text-red-600")}>
+                        {accounting.trialBalance.isBalanced ? "Balanced" : "Out of balance"}
+                      </p>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+
+              <Tabs value={reportTab} onValueChange={setReportTab}>
+                <TabsList className="flex-wrap h-auto">
+                  <TabsTrigger value="cash-book" className="cursor-pointer">Cash Book</TabsTrigger>
+                  <TabsTrigger value="petty-cash" className="cursor-pointer">Petty Cash Book</TabsTrigger>
+                  <TabsTrigger value="trial-balance" className="cursor-pointer">Trial Balance</TabsTrigger>
+                  <TabsTrigger value="balance-sheet" className="cursor-pointer">Balance Sheet</TabsTrigger>
+                </TabsList>
+
+                <TabsContent value="cash-book" className="mt-4">
+                  <Card>
+                    <CardHeader><CardTitle className="text-base flex items-center gap-2"><BookOpen className="h-4 w-4" /> Cash Book (IAS 7)</CardTitle></CardHeader>
+                    <CardContent className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b">
+                            <th className="text-left py-2 pr-3">Date</th>
+                            <th className="text-left py-2 pr-3">Ref</th>
+                            <th className="text-left py-2 pr-3">Description</th>
+                            <th className="text-right py-2 pr-3">Debit</th>
+                            <th className="text-right py-2 pr-3">Credit</th>
+                            <th className="text-right py-2">Balance</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {accounting.cashBook.entries.length === 0 ? (
+                            <tr><td colSpan={6} className="py-8 text-center text-muted-foreground">No cash entries yet. Record fee payments to populate.</td></tr>
+                          ) : accounting.cashBook.entries.map((row, i) => (
+                            <tr key={i} className="border-b last:border-0">
+                              <td className="py-2 pr-3">{row.date}</td>
+                              <td className="py-2 pr-3 font-mono text-xs">{row.entryNumber}</td>
+                              <td className="py-2 pr-3">{row.description}</td>
+                              <td className="py-2 pr-3 text-right">{row.debit ? `$${row.debit.toLocaleString()}` : "—"}</td>
+                              <td className="py-2 pr-3 text-right">{row.credit ? `$${row.credit.toLocaleString()}` : "—"}</td>
+                              <td className="py-2 text-right font-medium">${row.balance.toLocaleString()}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </CardContent>
+                  </Card>
+                </TabsContent>
+
+                <TabsContent value="petty-cash" className="mt-4">
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-base flex items-center gap-2"><Wallet className="h-4 w-4" /> Petty Cash Book</CardTitle>
+                      <p className="text-xs text-muted-foreground">Fund: {accounting.pettyCashFund?.name ?? "Main Petty Cash"} · Balance: ${(accounting.pettyCashFund?.currentBalance ?? 0).toLocaleString()}</p>
+                    </CardHeader>
+                    <CardContent className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b">
+                            <th className="text-left py-2 pr-3">Date</th>
+                            <th className="text-left py-2 pr-3">Voucher</th>
+                            <th className="text-left py-2 pr-3">Description</th>
+                            <th className="text-left py-2 pr-3">Type</th>
+                            <th className="text-right py-2">Amount</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {accounting.pettyCashBook.length === 0 ? (
+                            <tr><td colSpan={5} className="py-8 text-center text-muted-foreground">No petty cash disbursements. Approve expenses paid from petty cash.</td></tr>
+                          ) : accounting.pettyCashBook.map((row, i) => (
+                            <tr key={i} className="border-b last:border-0">
+                              <td className="py-2 pr-3">{row.date}</td>
+                              <td className="py-2 pr-3 font-mono text-xs">{row.voucherNumber}</td>
+                              <td className="py-2 pr-3">{row.description}</td>
+                              <td className="py-2 pr-3 capitalize">{row.type}</td>
+                              <td className="py-2 text-right font-medium">${row.amount.toLocaleString()}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </CardContent>
+                  </Card>
+                </TabsContent>
+
+                <TabsContent value="trial-balance" className="mt-4">
+                  <Card>
+                    <CardHeader><CardTitle className="text-base flex items-center gap-2"><Scale className="h-4 w-4" /> Trial Balance (IAS 1)</CardTitle></CardHeader>
+                    <CardContent className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b">
+                            <th className="text-left py-2 pr-3">Code</th>
+                            <th className="text-left py-2 pr-3">Account</th>
+                            <th className="text-left py-2 pr-3">IFRS</th>
+                            <th className="text-right py-2 pr-3">Debit</th>
+                            <th className="text-right py-2">Credit</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {accounting.trialBalance.accounts.map((row) => (
+                            <tr key={row.code} className="border-b last:border-0">
+                              <td className="py-2 pr-3 font-mono text-xs">{row.code}</td>
+                              <td className="py-2 pr-3">{row.name}</td>
+                              <td className="py-2 pr-3 text-xs text-muted-foreground">{row.ifrsCategory ?? "—"}</td>
+                              <td className="py-2 pr-3 text-right">{row.debit ? `$${row.debit.toLocaleString()}` : "—"}</td>
+                              <td className="py-2 text-right">{row.credit ? `$${row.credit.toLocaleString()}` : "—"}</td>
+                            </tr>
+                          ))}
+                          <tr className="font-bold border-t-2">
+                            <td colSpan={3} className="py-2 pr-3">Totals</td>
+                            <td className="py-2 pr-3 text-right">${accounting.trialBalance.totalDebits.toLocaleString()}</td>
+                            <td className="py-2 text-right">${accounting.trialBalance.totalCredits.toLocaleString()}</td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </CardContent>
+                  </Card>
+                </TabsContent>
+
+                <TabsContent value="balance-sheet" className="mt-4">
+                  <Card>
+                    <CardHeader><CardTitle className="text-base flex items-center gap-2"><FileSpreadsheet className="h-4 w-4" /> Statement of Financial Position (IAS 1)</CardTitle></CardHeader>
+                    <CardContent className="grid md:grid-cols-3 gap-6">
+                      {([
+                        ["Assets", accounting.balanceSheet.assets, accounting.balanceSheet.totalAssets],
+                        ["Liabilities", accounting.balanceSheet.liabilities, accounting.balanceSheet.totalLiabilities],
+                        ["Equity", accounting.balanceSheet.equity, accounting.balanceSheet.totalEquity],
+                      ] as const).map(([title, rows, total]) => (
+                        <div key={title}>
+                          <h3 className="font-semibold text-sm mb-2">{title}</h3>
+                          <div className="space-y-1.5">
+                            {rows.length === 0 ? <p className="text-xs text-muted-foreground">No balances</p> : rows.map((row) => (
+                              <div key={row.code} className="flex justify-between text-sm">
+                                <span className="text-muted-foreground truncate pr-2">{row.name}</span>
+                                <span className="font-medium shrink-0">${row.amount.toLocaleString()}</span>
+                              </div>
+                            ))}
+                            <div className="border-t pt-2 flex justify-between font-bold text-sm">
+                              <span>Total {title}</span>
+                              <span>${total.toLocaleString()}</span>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </CardContent>
+                  </Card>
+                </TabsContent>
+              </Tabs>
+
+              <p className="text-xs text-muted-foreground">
+                Double-entry postings are generated automatically from approved expenses and paid fee receipts.
+                Chart of accounts follows IFRS taxonomy (IFRS 15 revenue, IAS 1 presentation, IAS 7 cash flows).
+                Note: IFRS 17 applies to insurance contracts and is not applicable to standard school operations.
+              </p>
+            </>
+          )}
         </TabsContent>
       </Tabs>
     </div>

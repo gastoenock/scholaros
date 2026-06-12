@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs.tsx";
 import { Users, Plus, Search, Pencil, Trash2 } from "lucide-react";
 import { toast } from "sonner";
+import { routerDeleteWithConfirm } from "@/lib/confirm.ts";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -31,7 +32,7 @@ type StaffRole = "teacher" | "admin_staff" | "support_staff" | "principal" | "vi
 export type StaffMember = {
   id: number;
   schoolId: number;
-  branchId?: string | null;
+  schoolBranchId?: number | null;
   userId?: number | null;
   firstName: string;
   lastName: string;
@@ -344,10 +345,9 @@ function StaffContent({ staff, stats }: PageProps) {
     return result;
   }, [staff, roleFilter, search]);
 
-  const handleDelete = (id: number) => {
-    if (!confirm("Remove this staff member?")) return;
-    router.delete(`/dashboard/staff/${id}`, {
-      preserveScroll: true,
+  const handleDelete = async (id: number) => {
+    await routerDeleteWithConfirm(`/dashboard/staff/${id}`, {
+      title: "Remove this staff member?",
       onSuccess: () => toast.success("Staff member removed"),
       onError: () => toast.error("Failed to remove staff member"),
     });

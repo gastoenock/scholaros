@@ -11,7 +11,7 @@ return new class extends Migration
         Schema::create('staff', function (Blueprint $table) {
             $table->id();
             $table->foreignId('school_id')->constrained('schools')->cascadeOnDelete();
-            $table->string('branch_id')->nullable();
+            $table->foreignId('school_branch_id')->nullable()->constrained('school_branches')->nullOnDelete();
             $table->foreignId('user_id')->nullable()->constrained('users')->nullOnDelete();
             $table->string('first_name');
             $table->string('last_name');
@@ -33,12 +33,13 @@ return new class extends Migration
             $table->decimal('salary', 12, 2)->nullable();
             $table->string('status')->default('active');
             $table->timestamps();
+            $table->softDeletes();
         });
 
         Schema::create('students', function (Blueprint $table) {
             $table->id();
             $table->foreignId('school_id')->constrained('schools')->cascadeOnDelete();
-            $table->string('branch_id')->nullable();
+            $table->foreignId('school_branch_id')->nullable()->constrained('school_branches')->nullOnDelete();
             $table->string('first_name');
             $table->string('last_name');
             $table->string('date_of_birth')->nullable();
@@ -62,6 +63,7 @@ return new class extends Migration
             $table->string('status')->default('active');
             $table->text('medical_notes')->nullable();
             $table->timestamps();
+            $table->softDeletes();
 
             $table->index(['school_id', 'grade_level']);
         });
@@ -69,7 +71,7 @@ return new class extends Migration
         Schema::create('classes', function (Blueprint $table) {
             $table->id();
             $table->foreignId('school_id')->constrained('schools')->cascadeOnDelete();
-            $table->string('branch_id')->nullable();
+            $table->foreignId('school_branch_id')->nullable()->constrained('school_branches')->nullOnDelete();
             $table->string('name');
             $table->string('grade_level');
             $table->string('section')->nullable();
@@ -78,6 +80,7 @@ return new class extends Migration
             $table->string('academic_year');
             $table->unsignedInteger('capacity')->nullable();
             $table->timestamps();
+            $table->softDeletes();
 
             $table->index(['school_id', 'grade_level']);
         });
@@ -91,6 +94,7 @@ return new class extends Migration
             $table->text('description')->nullable();
             $table->foreignId('teacher_id')->nullable()->constrained('staff')->nullOnDelete();
             $table->timestamps();
+            $table->softDeletes();
         });
     }
 

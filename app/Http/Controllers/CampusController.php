@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\SchoolBranch;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -16,9 +17,6 @@ class CampusController extends Controller
         ]);
     }
 
-    /**
-     * Update the current user's school details and/or branches.
-     */
     public function update(Request $request): RedirectResponse
     {
         $school = $this->school();
@@ -34,16 +32,55 @@ class CampusController extends Controller
             'email' => ['nullable', 'string', 'max:255'],
             'website' => ['nullable', 'string', 'max:255'],
             'logo' => ['nullable', 'string'],
-            'branches' => ['sometimes', 'array'],
-            'branches.*.id' => ['required', 'string'],
-            'branches.*.name' => ['required', 'string'],
-            'branches.*.address' => ['nullable', 'string'],
-            'branches.*.phone' => ['nullable', 'string'],
-            'branches.*.principalName' => ['nullable', 'string'],
         ]);
 
         $school->update($this->snakeKeys($validated));
 
         return back()->with('success', 'School updated!');
+    }
+
+    public function storeBranch(Request $request): RedirectResponse
+    {
+        $school = $this->school();
+        abort_unless($school, 403);
+
+        $validated = $request->validate([
+            'code' => ['nullable', 'string', 'max:50'],
+            'name' => ['required', 'string', 'max:255'],
+            'address' => ['nullable', 'string', 'max:255'],
+            'phone' => ['nullable', 'string', 'max:255'],
+            'principalName' => ['nullable', 'string', 'max:255'],
+        ]);
+
+        $school->branches()->create($this->snakeKeys($validated));
+
+        return back()->with('success', 'Branch added!');
+    }
+
+    public function updateBranch(Request $request, SchoolBranch $branch): RedirectResponse
+    {
+        abort_unless($branch->school_id === $this->schoolId(), 403);
+
+        $validated = $request->validate([
+            'code' => ['nullable', 'string', 'max:50'],
+            'name' => ['sometimes', 'required', 'string', 'max:255'],
+            'address' => ['nullable', 'string', 'max:255'],
+            'phone' => ['nullable', 'string', 'max:255'],
+            'principalName' => ['nullable', 'string', 'max:255'],
+            'isActive' => ['sometimes', 'boolean'],
+        ]);
+
+        $branch->update($this->snakeKeys($validated));
+
+        return back()->with('success', 'Branch updated!');
+    }
+
+    public function destroyBranch(SchoolBranch $branch): RedirectResponse
+    {
+        abort_unless($branch->school_id === $this->schoolId(), 403);
+
+        $branch->delete();
+
+        return back()->with('success', 'Branch removed');
     }
 }

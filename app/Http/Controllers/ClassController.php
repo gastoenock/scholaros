@@ -33,7 +33,7 @@ class ClassController extends Controller
         abort_unless($schoolId, 403);
 
         $validated = $request->validate([
-            'branchId' => ['nullable', 'string'],
+            'schoolBranchId' => ['nullable', 'integer', 'exists:school_branches,id'],
             'name' => ['required', 'string', 'max:255'],
             'gradeLevel' => ['required', 'string'],
             'section' => ['nullable', 'string'],

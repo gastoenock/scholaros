@@ -11,6 +11,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select.tsx";
 import { toast } from "sonner";
+import { routerDeleteWithConfirm } from "@/lib/confirm.ts";
 import { motion } from "motion/react";
 import { CalendarDays, Plus, Pencil, Trash2, Clock } from "lucide-react";
 
@@ -132,9 +133,9 @@ function TimetableInner({ classes, staff, slots }: PageProps) {
     }
   };
 
-  const handleDelete = (slotId: number) => {
-    router.delete(`/dashboard/timetable/${slotId}`, {
-      preserveScroll: true,
+  const handleDelete = async (slotId: number) => {
+    await routerDeleteWithConfirm(`/dashboard/timetable/${slotId}`, {
+      title: "Remove this timetable slot?",
       onSuccess: () => toast.success("Slot removed"),
       onError: () => toast.error("Failed to remove slot"),
     });

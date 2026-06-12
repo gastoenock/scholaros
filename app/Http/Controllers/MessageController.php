@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\CallSession;
 use App\Models\Message;
 use App\Models\Notification;
 use App\Models\User;
@@ -13,47 +14,108 @@ use Inertia\Response;
 
 class MessageController extends Controller
 {
-    public function index(): Response
+    public function index(Request $request): Response
     {
         $user = Auth::user();
         $schoolId = $this->schoolId();
+        $userId = $user->id;
 
-        $inbox = Message::where('receiver_id', $user->id)
-            ->orderByDesc('created_at')
-            ->limit(100)
+        $allMessages = Message::query()
+            ->when($schoolId, fn ($q) => $q->where('school_id', $schoolId))
+            ->where(function ($q) use ($userId) {
+                $q->where('sender_id', $userId)->orWhere('receiver_id', $userId);
+            })
+            ->orderBy('created_at')
             ->get();
 
-        $sent = Message::where('sender_id', $user->id)
-            ->orderByDesc('created_at')
-            ->limit(100)
-            ->get();
-
-        // Lookup map for sender/receiver names (mirrors the Convex joins).
-        $userIds = $inbox->pluck('sender_id')
-            ->merge($sent->pluck('receiver_id'))
+        $relatedUserIds = $allMessages
+            ->pluck('sender_id')
+            ->merge($allMessages->pluck('receiver_id'))
             ->unique()
+            ->filter(fn ($id) => $id !== $userId)
             ->values();
-        $names = User::whereIn('id', $userIds)->pluck('name', 'id');
 
-        $users = $schoolId
-            ? User::where('school_id', $schoolId)->orderBy('name')->get()
+        $usersMap = User::whereIn('id', $relatedUserIds)->get()->keyBy('id');
+
+        $threads = [];
+        foreach ($allMessages as $message) {
+            $otherId = $message->sender_id === $userId
+                ? $message->receiver_id
+                : $message->sender_id;
+
+            $threads[$otherId] ??= [];
+            $threads[$otherId][] = array_merge($message->toArray(), [
+                'isMine' => $message->sender_id === $userId,
+            ]);
+        }
+
+        $conversations = collect($threads)
+            ->map(function (array $messages, int $otherId) use ($usersMap, $userId) {
+                $last = $messages[array_key_last($messages)];
+                $other = $usersMap->get($otherId);
+
+                return [
+                    'userId' => $otherId,
+                    'userName' => $other?->name ?? 'Unknown',
+                    'userRole' => $other?->role,
+                    'lastMessage' => $last['body'],
+                    'lastMessageAt' => $last['createdAt'],
+                    'unreadCount' => collect($messages)
+                        ->filter(fn ($m) => ! $m['isMine'] && ! $m['isRead'])
+                        ->count(),
+                    'isSentByMe' => $last['isMine'],
+                ];
+            })
+            ->sortByDesc('lastMessageAt')
+            ->values()
+            ->all();
+
+        $schoolUsers = $schoolId
+            ? User::where('school_id', $schoolId)
+                ->where('id', '!=', $userId)
+                ->orderBy('name')
+                ->get()
+                ->map(fn (User $u) => [
+                    'id' => $u->id,
+                    'name' => $u->name,
+                    'email' => $u->email,
+                    'role' => $u->role,
+                ])
             : collect();
 
+        $contacts = $schoolUsers
+            ->filter(fn (array $u) => ! isset($threads[$u['id']]))
+            ->values();
+
+        $newMessagesCount = $allMessages
+            ->where('receiver_id', $userId)
+            ->where('is_read', false)
+            ->count();
+
+        $activeWith = $request->integer('with') ?: null;
+        if ($activeWith) {
+            $isValidPartner = $schoolUsers->contains(fn (array $u) => $u['id'] === $activeWith);
+            if (! $isValidPartner) {
+                $activeWith = null;
+            }
+        }
+
         return Inertia::render('dashboard/messages/page', [
-            'inbox' => $inbox->map(fn ($m) => [
-                ...$m->toArray(),
-                'senderName' => $names[$m->sender_id] ?? 'Unknown',
-            ]),
-            'sent' => $sent->map(fn ($m) => [
-                ...$m->toArray(),
-                'receiverName' => $names[$m->receiver_id] ?? 'Unknown',
-            ]),
-            'users' => $users->map(fn ($u) => [
-                'id' => $u->id,
-                'name' => $u->name,
-                'email' => $u->email,
-                'role' => $u->role,
-            ]),
+            'conversations' => $conversations,
+            'threads' => $threads,
+            'contacts' => $contacts,
+            'schoolUsers' => $schoolUsers,
+            'activeWith' => $activeWith,
+            'newMessagesCount' => $newMessagesCount,
+            'currentUserId' => $userId,
+            'activeCall' => $schoolId ? CallSession::forSchool($schoolId)
+                ->where('status', 'active')
+                ->where(function ($q) use ($userId) {
+                    $q->where('initiator_id', $userId)
+                        ->orWhereHas('participants', fn ($p) => $p->where('user_id', $userId)->whereIn('status', ['invited', 'joined']));
+                })
+                ->latest()
+                ->first()?->toArray() : null,
         ]);
     }
 
@@ -77,7 +139,6 @@ class MessageController extends Controller
             'is_read' => false,
         ]);
 
-        // Notify recipient (mirrors Convex sendMessage behavior).
         Notification::create([
             'school_id' => $schoolId,
             'user_id' => $validated['receiverId'],
@@ -88,14 +149,23 @@ class MessageController extends Controller
             'related_id' => (string) $message->id,
         ]);
 
-        return back()->with('success', 'Message sent');
+        return redirect()
+            ->route('messages.index', ['with' => $validated['receiverId']])
+            ->with('success', 'Message sent');
     }
 
-    public function markRead(Message $message): RedirectResponse
+    public function markThreadRead(Request $request): RedirectResponse
     {
-        abort_unless($message->receiver_id === Auth::id(), 403);
+        $userId = Auth::id();
 
-        $message->update(['is_read' => true]);
+        $validated = $request->validate([
+            'with' => ['required', 'integer', 'exists:users,id'],
+        ]);
+
+        Message::where('sender_id', $validated['with'])
+            ->where('receiver_id', $userId)
+            ->where('is_read', false)
+            ->update(['is_read' => true]);
 
         return back();
     }
@@ -105,8 +175,14 @@ class MessageController extends Controller
         $userId = Auth::id();
         abort_unless($message->receiver_id === $userId || $message->sender_id === $userId, 403);
 
+        $otherId = $message->sender_id === $userId
+            ? $message->receiver_id
+            : $message->sender_id;
+
         $message->delete();
 
-        return back();
+        return redirect()
+            ->route('messages.index', ['with' => $otherId])
+            ->with('success', 'Message removed');
     }
 }

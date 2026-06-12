@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label.tsx";
 import { Textarea } from "@/components/ui/textarea.tsx";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select.tsx";
 import { toast } from "sonner";
+import { routerDeleteWithConfirm } from "@/lib/confirm.ts";
 import { motion } from "motion/react";
 import { Library, Plus, Search, BookOpen, ArrowLeftRight, CheckCircle2, AlertCircle, Trash2 } from "lucide-react";
 import { format, differenceInDays } from "date-fns";
@@ -161,7 +162,7 @@ function BookCatalog({ books: allBooks, students, staff }: { books: Book[]; stud
                       <button onClick={() => { setSelectedBook(b); setIssueOpen(true); }} className="p-1.5 rounded hover:bg-primary/10 text-primary cursor-pointer" title="Issue Book">
                         <ArrowLeftRight className="h-3.5 w-3.5" />
                       </button>
-                      <button onClick={() => router.delete(`/dashboard/library/books/${b.id}`, { preserveScroll: true, onError: () => toast.error("Failed to remove book") })} className="p-1.5 rounded hover:bg-red-50 hover:text-red-600 cursor-pointer" title="Delete Book"><Trash2 className="h-3.5 w-3.5" /></button>
+                      <button onClick={() => void routerDeleteWithConfirm(`/dashboard/library/books/${b.id}`, { title: "Delete this book?", onError: () => toast.error("Failed to remove book") })} className="p-1.5 rounded hover:bg-red-50 hover:text-red-600 cursor-pointer" title="Delete Book"><Trash2 className="h-3.5 w-3.5" /></button>
                     </div>
                   </div>
                   <div className="flex flex-wrap gap-1.5 mb-2">

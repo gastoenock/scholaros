@@ -12,12 +12,14 @@ import { Input } from "@/components/ui/input.tsx";
 import { Label } from "@/components/ui/label.tsx";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select.tsx";
 import { Textarea } from "@/components/ui/textarea.tsx";
+import { Checkbox } from "@/components/ui/checkbox.tsx";
 import {
-  Calendar, Plus, Video, MapPin, Clock, CheckCircle2, XCircle,
+  Calendar, Plus, Video, MapPin, Clock, CheckCircle2, XCircle, Trash2,
 } from "lucide-react";
 import { motion } from "motion/react";
 import { format } from "date-fns";
 import { toast } from "sonner";
+import { routerDeleteWithConfirm } from "@/lib/confirm.ts";
 import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription, EmptyContent } from "@/components/ui/empty.tsx";
 import type { StaffMember } from "../staff/page.tsx";
 import type { Student } from "../students/page.tsx";
@@ -25,9 +27,7 @@ import type { Student } from "../students/page.tsx";
 export type Meeting = {
   id: number;
   schoolId: number;
-  parentId: number;
-  teacherId: number;
-  studentId: number;
+  parentId?: number | null;
   title: string;
   description?: string | null;
   scheduledAt: string;
@@ -37,8 +37,10 @@ export type Meeting = {
   location?: string | null;
   meetingLink?: string | null;
   parentName: string;
-  teacherName: string;
-  studentName: string;
+  staffIds: number[];
+  studentIds: number[];
+  staffNames: string[];
+  studentNames: string[];
 };
 
 type PageProps = {
@@ -63,23 +65,31 @@ function CreateMeetingForm({
   const [duration, setDuration] = useState("30");
   const [meetingType, setMeetingType] = useState<"in_person" | "virtual">("in_person");
   const [location, setLocation] = useState("");
-  const [selectedTeacher, setSelectedTeacher] = useState("");
-  const [selectedStudent, setSelectedStudent] = useState("");
+  const [selectedStaffIds, setSelectedStaffIds] = useState<number[]>([]);
+  const [selectedStudentIds, setSelectedStudentIds] = useState<number[]>([]);
   const [submitting, setSubmitting] = useState(false);
 
-  const teachers = staff.filter((s) => s.role === "teacher");
+  const teachers = staff.filter((s) => ["teacher", "principal", "vice_principal", "admin_staff"].includes(s.role));
+
+  const toggleStaff = (id: number) => {
+    setSelectedStaffIds((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]);
+  };
+
+  const toggleStudent = (id: number) => {
+    setSelectedStudentIds((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]);
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedTeacher || !selectedStudent || !scheduledAt || !title) {
-      toast.error("Please fill in all required fields");
+    if (selectedStaffIds.length === 0 || selectedStudentIds.length === 0 || !scheduledAt || !title) {
+      toast.error("Please fill in all required fields and select at least one staff member and student");
       return;
     }
 
     setSubmitting(true);
     router.post("/dashboard/meetings", {
-      teacherId: parseInt(selectedTeacher, 10),
-      studentId: parseInt(selectedStudent, 10),
+      staffIds: selectedStaffIds,
+      studentIds: selectedStudentIds,
       title,
       description: description || undefined,
       scheduledAt: new Date(scheduledAt).toISOString(),
@@ -98,37 +108,33 @@ function CreateMeetingForm({
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
+    <form onSubmit={handleSubmit} className="space-y-4 max-h-[70vh] overflow-y-auto pr-1">
       <div>
         <Label>Title</Label>
         <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Meeting about academic progress" required />
       </div>
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
-          <Label>Teacher</Label>
-          <Select value={selectedTeacher} onValueChange={setSelectedTeacher}>
-            <SelectTrigger className="cursor-pointer"><SelectValue placeholder="Select teacher" /></SelectTrigger>
-            <SelectContent>
-              {teachers.map((t) => (
-                <SelectItem key={t.id} value={String(t.id)} className="cursor-pointer">
-                  {t.firstName} {t.lastName}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <Label>Staff / Teachers *</Label>
+          <div className="mt-2 max-h-40 overflow-y-auto border rounded-lg p-2 space-y-2">
+            {teachers.map((t) => (
+              <label key={t.id} className="flex items-center gap-2 text-sm cursor-pointer">
+                <Checkbox checked={selectedStaffIds.includes(t.id)} onCheckedChange={() => toggleStaff(t.id)} />
+                {t.firstName} {t.lastName}
+              </label>
+            ))}
+          </div>
         </div>
         <div>
-          <Label>Student</Label>
-          <Select value={selectedStudent} onValueChange={setSelectedStudent}>
-            <SelectTrigger className="cursor-pointer"><SelectValue placeholder="Select student" /></SelectTrigger>
-            <SelectContent>
-              {students.map((s) => (
-                <SelectItem key={s.id} value={String(s.id)} className="cursor-pointer">
-                  {s.firstName} {s.lastName}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <Label>Students *</Label>
+          <div className="mt-2 max-h-40 overflow-y-auto border rounded-lg p-2 space-y-2">
+            {students.map((s) => (
+              <label key={s.id} className="flex items-center gap-2 text-sm cursor-pointer">
+                <Checkbox checked={selectedStudentIds.includes(s.id)} onCheckedChange={() => toggleStudent(s.id)} />
+                {s.firstName} {s.lastName}
+              </label>
+            ))}
+          </div>
         </div>
       </div>
       <div className="grid grid-cols-2 gap-4">
@@ -194,6 +200,14 @@ function MeetingsContent({ meetings, staff, students, filters }: PageProps) {
     });
   };
 
+  const handleDelete = async (meetingId: number) => {
+    await routerDeleteWithConfirm(`/dashboard/meetings/${meetingId}`, {
+      title: "Remove this meeting?",
+      onSuccess: () => toast.success("Meeting removed"),
+      onError: () => toast.error("Failed to remove meeting"),
+    });
+  };
+
   const statusColors: Record<string, string> = {
     requested: "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300",
     confirmed: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300",
@@ -219,7 +233,7 @@ function MeetingsContent({ meetings, staff, students, filters }: PageProps) {
       >
         <div>
           <h1 className="text-2xl font-extrabold">Parent-Teacher Meetings</h1>
-          <p className="text-muted-foreground mt-1">Schedule and manage meetings</p>
+          <p className="text-muted-foreground mt-1">Schedule and manage meetings with multiple participants</p>
         </div>
         <div className="flex gap-2">
           <Select value={filters.status} onValueChange={handleStatusFilter}>
@@ -274,10 +288,10 @@ function MeetingsContent({ meetings, staff, students, filters }: PageProps) {
                         </span>
                         <span>({meeting.durationMinutes} min)</span>
                       </div>
-                      <div className="flex flex-wrap gap-2 mt-2 text-xs text-muted-foreground">
-                        <span>Parent: {meeting.parentName}</span>
-                        <span>Teacher: {meeting.teacherName}</span>
-                        <span>Student: {meeting.studentName}</span>
+                      <div className="flex flex-col gap-1 mt-2 text-xs text-muted-foreground">
+                        <span>Requested by: {meeting.parentName}</span>
+                        <span>Staff: {meeting.staffNames.join(", ") || "—"}</span>
+                        <span>Students: {meeting.studentNames.join(", ") || "—"}</span>
                       </div>
                     </div>
                   </div>
@@ -296,6 +310,11 @@ function MeetingsContent({ meetings, staff, students, filters }: PageProps) {
                     {meeting.status === "confirmed" && (
                       <Button size="sm" variant="ghost" onClick={() => handleStatusUpdate(meeting.id, "completed")} className="cursor-pointer text-blue-600 hover:text-blue-700">
                         <CheckCircle2 className="h-4 w-4 mr-1" /> Done
+                      </Button>
+                    )}
+                    {(role === "admin" || role === "superadmin") && (
+                      <Button size="sm" variant="ghost" onClick={() => handleDelete(meeting.id)} className="cursor-pointer text-destructive">
+                        <Trash2 className="h-4 w-4" />
                       </Button>
                     )}
                   </div>

@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { router } from "@inertiajs/react";
+import { Link, router } from "@inertiajs/react";
 import { DashboardLayout } from "../_components/layout.tsx";
 import { useCurrentSchool } from "../_components/use-current-school.ts";
 import { Button } from "@/components/ui/button.tsx";
@@ -26,6 +26,7 @@ import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription, EmptyCont
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs.tsx";
 import { Textarea } from "@/components/ui/textarea.tsx";
 import type { Branch, School } from "@/lib/types.ts";
+import { routerDeleteWithConfirm } from "@/lib/confirm.ts";
 
 const GRADES = ["Pre-K", "Kindergarten", "Grade 1", "Grade 2", "Grade 3", "Grade 4", "Grade 5",
   "Grade 6", "Grade 7", "Grade 8", "Grade 9", "Grade 10", "Grade 11", "Grade 12"];
@@ -42,7 +43,7 @@ type Guardian = {
 export type Student = {
   id: number;
   schoolId: number;
-  branchId?: string | null;
+  schoolBranchId?: number | null;
   firstName: string;
   lastName: string;
   dateOfBirth?: string | null;
@@ -156,9 +157,17 @@ function StudentFormDialog({
     name: "guardians",
   });
 
+  const [selectedBranchId, setSelectedBranchId] = useState<string>(
+    editStudent?.schoolBranchId ? String(editStudent.schoolBranchId) : "",
+  );
+
   const onSubmit = (data: StudentFormData) =>
     new Promise<void>((resolve) => {
-      const payload = { ...data, email: data.email || undefined };
+      const payload = {
+        ...data,
+        email: data.email || undefined,
+        schoolBranchId: selectedBranchId ? parseInt(selectedBranchId, 10) : undefined,
+      };
       const options = {
         preserveScroll: true,
         onSuccess: () => {
@@ -281,10 +290,11 @@ function StudentFormDialog({
                 {branches.length > 0 && (
                   <div className="col-span-2">
                     <Label className="mb-1.5 block">Campus/Branch</Label>
-                    <Select onValueChange={(v) => setValue("academicYear", v)}>
+                    <Select value={selectedBranchId || "none"} onValueChange={(v) => setSelectedBranchId(v === "none" ? "" : v)}>
                       <SelectTrigger><SelectValue placeholder="Select campus" /></SelectTrigger>
                       <SelectContent>
-                        {branches.map((b) => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
+                        <SelectItem value="none">No branch</SelectItem>
+                        {branches.map((b) => <SelectItem key={b.id} value={String(b.id)}>{b.name}</SelectItem>)}
                       </SelectContent>
                     </Select>
                   </div>
@@ -351,110 +361,14 @@ function StudentFormDialog({
   );
 }
 
-function StudentDetailDialog({ student, onClose }: { student: Student | null; onClose: () => void }) {
-  if (!student) return null;
-  return (
-    <Dialog open={!!student} onOpenChange={onClose}>
-      <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
-              <User className="h-5 w-5 text-primary" />
-            </div>
-            {student.firstName} {student.lastName}
-          </DialogTitle>
-          <DialogDescription>Student ID: {student.studentId}</DialogDescription>
-        </DialogHeader>
-        <div className="space-y-4">
-          <div className="flex items-center gap-2">
-            <Badge className={`${statusColors[student.status]} border capitalize`}>{student.status}</Badge>
-            {student.gradeLevel && <Badge variant="secondary">{student.gradeLevel}</Badge>}
-            {student.classSection && <Badge variant="secondary">Section {student.classSection}</Badge>}
-          </div>
-
-          <div className="grid grid-cols-2 gap-3 text-sm">
-            {student.dateOfBirth && (
-              <div className="flex items-center gap-2 text-muted-foreground">
-                <Calendar className="h-3.5 w-3.5" />
-                <span>Born {format(new Date(student.dateOfBirth), "MMM d, yyyy")}</span>
-              </div>
-            )}
-            {student.gender && (
-              <div className="flex items-center gap-2 text-muted-foreground">
-                <User className="h-3.5 w-3.5" />
-                <span className="capitalize">{student.gender}</span>
-              </div>
-            )}
-            {student.email && (
-              <div className="flex items-center gap-2 text-muted-foreground">
-                <Mail className="h-3.5 w-3.5" />
-                <span>{student.email}</span>
-              </div>
-            )}
-            {student.phone && (
-              <div className="flex items-center gap-2 text-muted-foreground">
-                <Phone className="h-3.5 w-3.5" />
-                <span>{student.phone}</span>
-              </div>
-            )}
-            {(student.city || student.state) && (
-              <div className="flex items-center gap-2 text-muted-foreground col-span-2">
-                <MapPin className="h-3.5 w-3.5" />
-                <span>{[student.address, student.city, student.state].filter(Boolean).join(", ")}</span>
-              </div>
-            )}
-            {student.bloodGroup && (
-              <div className="flex items-center gap-2 text-muted-foreground">
-                <HeartPulse className="h-3.5 w-3.5" />
-                <span>Blood Group: {student.bloodGroup}</span>
-              </div>
-            )}
-          </div>
-
-          {student.medicalNotes && (
-            <div className="p-3 rounded-lg bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800">
-              <p className="text-xs font-semibold text-amber-700 dark:text-amber-400 mb-1">Medical Notes</p>
-              <p className="text-sm text-amber-800 dark:text-amber-300">{student.medicalNotes}</p>
-            </div>
-          )}
-
-          {student.guardians && student.guardians.length > 0 && (
-            <div>
-              <h4 className="text-sm font-semibold mb-2">Guardians</h4>
-              <div className="space-y-2">
-                {student.guardians.map((g, i) => (
-                  <div key={i} className="p-3 rounded-lg border bg-muted/30">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm font-medium">{g.name}</span>
-                      <span className="text-xs text-muted-foreground">{g.relationship}</span>
-                    </div>
-                    <div className="flex gap-3 mt-1 text-xs text-muted-foreground">
-                      <span>{g.phone}</span>
-                      {g.email && <span>{g.email}</span>}
-                    </div>
-                    {g.isEmergencyContact && (
-                      <Badge className="mt-1 bg-red-100 text-red-700 border-red-200 border text-xs">Emergency Contact</Badge>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-function StudentsContent({ students, stats, school }: PageProps) {
+function StudentsContent({ students, stats, school, branches }: PageProps) {
   const { schoolId } = useCurrentSchool();
   const [search, setSearch] = useState("");
   const [gradeFilter, setGradeFilter] = useState("all");
   const [addOpen, setAddOpen] = useState(false);
   const [editStudent, setEditStudent] = useState<Student | null>(null);
-  const [viewStudent, setViewStudent] = useState<Student | null>(null);
 
-  const branches = school?.branches ?? [];
+  const branchList = branches.length > 0 ? branches : (school?.branches ?? []);
 
   const filteredStudents = useMemo(() => {
     let result = students;
@@ -474,10 +388,9 @@ function StudentsContent({ students, stats, school }: PageProps) {
     return result;
   }, [students, search, gradeFilter]);
 
-  const handleDelete = (id: number) => {
-    if (!confirm("Are you sure you want to remove this student?")) return;
-    router.delete(`/dashboard/students/${id}`, {
-      preserveScroll: true,
+  const handleDelete = async (id: number) => {
+    await routerDeleteWithConfirm(`/dashboard/students/${id}`, {
+      title: "Remove this student?",
       onSuccess: () => toast.success("Student removed"),
       onError: () => toast.error("Failed to remove student"),
     });
@@ -509,7 +422,7 @@ function StudentsContent({ students, stats, school }: PageProps) {
           { label: "Total Students", value: stats?.total ?? "—", color: "text-blue-600" },
           { label: "Active", value: stats?.active ?? "—", color: "text-green-600" },
           { label: "Grade Levels", value: Object.keys(stats?.byGrade ?? {}).length || "—", color: "text-purple-600" },
-          { label: "Branches", value: branches.length || "1", color: "text-amber-600" },
+          { label: "Branches", value: branchList.length || "1", color: "text-amber-600" },
         ].map((s) => (
           <Card key={s.label}>
             <CardContent className="p-4">
@@ -602,8 +515,10 @@ function StudentsContent({ students, stats, school }: PageProps) {
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center justify-end gap-1">
-                        <Button variant="ghost" size="sm" className="h-7 w-7 p-0 cursor-pointer" onClick={() => setViewStudent(student)}>
-                          <Eye className="h-3.5 w-3.5" />
+                        <Button variant="ghost" size="sm" className="h-7 w-7 p-0 cursor-pointer" asChild>
+                          <Link href={`/dashboard/students/${student.id}`}>
+                            <Eye className="h-3.5 w-3.5" />
+                          </Link>
                         </Button>
                         <Button variant="ghost" size="sm" className="h-7 w-7 p-0 cursor-pointer" onClick={() => setEditStudent(student)}>
                           <Pencil className="h-3.5 w-3.5" />
@@ -626,9 +541,8 @@ function StudentsContent({ students, stats, school }: PageProps) {
         open={addOpen || !!editStudent}
         onClose={() => { setAddOpen(false); setEditStudent(null); }}
         editStudent={editStudent}
-        branches={branches}
+        branches={branchList}
       />
-      <StudentDetailDialog student={viewStudent} onClose={() => setViewStudent(null)} />
     </div>
   );
 }
@@ -637,6 +551,7 @@ type PageProps = {
   students: Student[];
   stats: Stats;
   school: School | null;
+  branches: Branch[];
 };
 
 export default function StudentsPage(props: PageProps) {

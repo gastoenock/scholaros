@@ -4,6 +4,7 @@ namespace App\Http\Middleware;
 
 use Illuminate\Http\Request;
 use Inertia\Middleware;
+use Inertia\Support\Header;
 
 class HandleInertiaRequests extends Middleware
 {
@@ -23,6 +24,12 @@ class HandleInertiaRequests extends Middleware
      */
     public function version(Request $request): ?string
     {
+        // While Vite dev server is running, mirror the client asset version so
+        // first navigations don't get 409 location redirects back to dashboard.
+        if (file_exists(public_path('hot'))) {
+            return $request->header(Header::VERSION, '');
+        }
+
         return parent::version($request);
     }
 

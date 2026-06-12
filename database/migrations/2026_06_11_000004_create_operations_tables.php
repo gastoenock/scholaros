@@ -21,6 +21,7 @@ return new class extends Migration
             $table->string('end_time');
             $table->string('academic_year');
             $table->timestamps();
+            $table->softDeletes();
         });
 
         Schema::create('attendance_records', function (Blueprint $table) {
@@ -34,6 +35,7 @@ return new class extends Migration
             $table->foreignId('marked_by')->nullable()->constrained('users')->nullOnDelete();
             $table->text('note')->nullable();
             $table->timestamps();
+            $table->softDeletes();
 
             $table->index(['school_id', 'date']);
             $table->index(['person_id', 'date']);
@@ -42,7 +44,7 @@ return new class extends Migration
         Schema::create('admissions', function (Blueprint $table) {
             $table->id();
             $table->foreignId('school_id')->constrained('schools')->cascadeOnDelete();
-            $table->string('branch_id')->nullable();
+            $table->foreignId('school_branch_id')->nullable()->constrained('school_branches')->nullOnDelete();
             $table->string('first_name');
             $table->string('last_name');
             $table->string('date_of_birth')->nullable();
@@ -60,6 +62,7 @@ return new class extends Migration
             $table->text('review_notes')->nullable();
             $table->string('interview_date')->nullable();
             $table->timestamps();
+            $table->softDeletes();
         });
 
         Schema::create('notifications', function (Blueprint $table) {
@@ -72,6 +75,7 @@ return new class extends Migration
             $table->boolean('is_read')->default(false);
             $table->string('related_id')->nullable();
             $table->timestamps();
+            $table->softDeletes();
 
             $table->index(['user_id', 'is_read']);
         });
@@ -86,6 +90,7 @@ return new class extends Migration
             $table->boolean('is_read')->default(false);
             $table->foreignId('parent_message_id')->nullable()->constrained('messages')->nullOnDelete();
             $table->timestamps();
+            $table->softDeletes();
         });
     }
 

@@ -11,6 +11,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select.tsx";
 import { toast } from "sonner";
+import { routerDeleteWithConfirm } from "@/lib/confirm.ts";
 import { motion } from "motion/react";
 import { BookOpen, Plus, Trash2, Pencil, Users } from "lucide-react";
 import type { StaffMember } from "../staff/page.tsx";
@@ -19,7 +20,7 @@ import type { Student } from "../students/page.tsx";
 export type SchoolClass = {
   id: number;
   schoolId: number;
-  branchId?: string | null;
+  schoolBranchId?: number | null;
   name: string;
   gradeLevel: string;
   section?: string | null;
@@ -89,10 +90,9 @@ function ClassesContent({ classes, staff, students }: PageProps) {
     }
   };
 
-  const handleDelete = (id: number) => {
-    if (!confirm("Delete this class?")) return;
-    router.delete(`/dashboard/classes/${id}`, {
-      preserveScroll: true,
+  const handleDelete = async (id: number) => {
+    await routerDeleteWithConfirm(`/dashboard/classes/${id}`, {
+      title: "Delete this class?",
       onSuccess: () => toast.success("Class deleted"),
       onError: () => toast.error("Failed to delete class"),
     });

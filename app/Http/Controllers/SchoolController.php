@@ -60,12 +60,6 @@ class SchoolController extends Controller
             'email' => ['nullable', 'email'],
             'website' => ['nullable', 'string'],
             'logo' => ['nullable', 'string'],
-            'branches' => ['nullable', 'array'],
-            'branches.*.id' => ['required', 'string'],
-            'branches.*.name' => ['required', 'string'],
-            'branches.*.address' => ['nullable', 'string'],
-            'branches.*.phone' => ['nullable', 'string'],
-            'branches.*.principalName' => ['nullable', 'string'],
         ]);
 
         $school->update($this->snakeKeys($validated));

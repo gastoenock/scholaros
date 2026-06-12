@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs.tsx";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog.tsx";
 import { toast } from "sonner";
+import { routerDeleteWithConfirm } from "@/lib/confirm.ts";
 import { cn } from "@/lib/utils.ts";
 import {
   Home, Users, Plus, Trash2, Wrench, Shield,
@@ -499,13 +500,7 @@ function DormitoryContent({ rooms, allocations, maintenance, securityLogs, stude
                           <SelectItem value="maintenance">Maintenance</SelectItem>
                         </SelectContent>
                       </Select>
-                      <Button variant="ghost" size="icon" className="cursor-pointer h-7 w-7 text-destructive" onClick={() => {
-                        router.delete(`/dashboard/dormitory/rooms/${room.id}`, {
-                          preserveScroll: true,
-                          onSuccess: () => toast.success("Deleted"),
-                          onError: () => toast.error("Failed to delete"),
-                        });
-                      }}>
+                      <Button variant="ghost" size="icon" className="cursor-pointer h-7 w-7 text-destructive" onClick={() => void routerDeleteWithConfirm(`/dashboard/dormitory/rooms/${room.id}`, { title: "Delete this room?", onSuccess: () => toast.success("Deleted"), onError: () => toast.error("Failed to delete") })}>
                         <Trash2 className="h-3.5 w-3.5" />
                       </Button>
                     </div>
@@ -616,13 +611,7 @@ function DormitoryContent({ rooms, allocations, maintenance, securityLogs, stude
                             <CheckCircle className="h-3.5 w-3.5" />
                           </Button>
                         )}
-                        <Button variant="ghost" size="icon" className="cursor-pointer h-7 w-7 text-destructive" onClick={() => {
-                          router.delete(`/dashboard/dormitory/maintenance/${m.id}`, {
-                            preserveScroll: true,
-                            onSuccess: () => toast.success("Deleted"),
-                            onError: () => toast.error("Failed to delete"),
-                          });
-                        }}>
+                        <Button variant="ghost" size="icon" className="cursor-pointer h-7 w-7 text-destructive" onClick={() => void routerDeleteWithConfirm(`/dashboard/dormitory/maintenance/${m.id}`, { title: "Delete this maintenance request?", onSuccess: () => toast.success("Deleted"), onError: () => toast.error("Failed to delete") })}>
                           <Trash2 className="h-3.5 w-3.5" />
                         </Button>
                       </div>

@@ -2,7 +2,12 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\AttendanceRecord;
+use App\Models\ExamResult;
+use App\Models\FeePayment;
+use App\Models\SchoolBranch;
 use App\Models\Student;
+use App\Models\TransportAssignment;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -15,7 +20,7 @@ class StudentController extends Controller
         $schoolId = $this->schoolId();
 
         $students = $schoolId
-            ? Student::forSchool($schoolId)->orderBy('last_name')->get()
+            ? Student::forSchool($schoolId)->with('branch')->orderBy('last_name')->get()
             : collect();
 
         $stats = [
@@ -24,10 +29,68 @@ class StudentController extends Controller
             'byGrade' => $students->countBy(fn ($s) => $s->grade_level ?? 'Unassigned'),
         ];
 
+        $school = $this->school();
+
         return Inertia::render('dashboard/students/page', [
             'students' => $students,
             'stats' => $stats,
-            'school' => $this->school(),
+            'school' => $school,
+            'branches' => $school?->branches ?? [],
+        ]);
+    }
+
+    public function show(Student $student): Response
+    {
+        abort_unless($student->school_id === $this->schoolId(), 403);
+
+        $student->load('branch');
+
+        $attendanceRecords = AttendanceRecord::query()
+            ->where('school_id', $student->school_id)
+            ->where('person_id', (string) $student->id)
+            ->orderByDesc('date')
+            ->limit(30)
+            ->get();
+
+        $attendanceSummary = [
+            'present' => $attendanceRecords->where('status', 'present')->count(),
+            'absent' => $attendanceRecords->where('status', 'absent')->count(),
+            'late' => $attendanceRecords->where('status', 'late')->count(),
+            'total' => $attendanceRecords->count(),
+        ];
+
+        $feePayments = FeePayment::query()
+            ->where('school_id', $student->school_id)
+            ->where('student_id', $student->id)
+            ->orderByDesc('payment_date')
+            ->limit(10)
+            ->get();
+
+        $examResults = ExamResult::query()
+            ->where('school_id', $student->school_id)
+            ->where('student_id', $student->id)
+            ->with('exam')
+            ->orderByDesc('created_at')
+            ->limit(10)
+            ->get();
+
+        $transport = TransportAssignment::query()
+            ->where('school_id', $student->school_id)
+            ->where('student_id', $student->id)
+            ->where('is_active', true)
+            ->with(['bus', 'route'])
+            ->first();
+
+        $branches = SchoolBranch::forSchool($student->school_id)->orderBy('name')->get();
+
+        return Inertia::render('dashboard/students/show', [
+            'student' => $student,
+            'branches' => $branches,
+            'attendanceRecords' => $attendanceRecords,
+            'attendanceSummary' => $attendanceSummary,
+            'feePayments' => $feePayments,
+            'examResults' => $examResults,
+            'transport' => $transport,
         ]);
     }
 
@@ -37,7 +100,7 @@ class StudentController extends Controller
         abort_unless($schoolId, 403);
 
         $validated = $request->validate([
-            'branchId' => ['nullable', 'string'],
+            'schoolBranchId' => ['nullable', 'integer', 'exists:school_branches,id'],
             'firstName' => ['required', 'string', 'max:255'],
             'lastName' => ['required', 'string', 'max:255'],
             'dateOfBirth' => ['nullable', 'string'],
@@ -82,7 +145,7 @@ class StudentController extends Controller
         abort_unless($student->school_id === $this->schoolId(), 403);
 
         $validated = $request->validate([
-            'branchId' => ['nullable', 'string'],
+            'schoolBranchId' => ['nullable', 'integer', 'exists:school_branches,id'],
             'firstName' => ['sometimes', 'string', 'max:255'],
             'lastName' => ['sometimes', 'string', 'max:255'],
             'dateOfBirth' => ['nullable', 'string'],
@@ -122,6 +185,6 @@ class StudentController extends Controller
 
         $student->delete();
 
-        return back()->with('success', 'Student removed');
+        return redirect()->route('students.index')->with('success', 'Student removed');
     }
 }

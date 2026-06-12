@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs.tsx";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog.tsx";
 import { toast } from "sonner";
+import { routerDeleteWithConfirm } from "@/lib/confirm.ts";
 import { cn } from "@/lib/utils.ts";
 import {
   Bus, MapPin, Users, Plus, Trash2, Navigation,
@@ -408,13 +409,7 @@ function TransportContent({ routes, buses, assignments, students }: PageProps) {
                           <SelectItem value="inactive">Inactive</SelectItem>
                         </SelectContent>
                       </Select>
-                      <Button variant="ghost" size="icon" className="cursor-pointer h-7 w-7 text-destructive" onClick={() => {
-                        router.delete(`/dashboard/transport/buses/${bus.id}`, {
-                          preserveScroll: true,
-                          onSuccess: () => toast.success("Deleted"),
-                          onError: () => toast.error("Failed to delete"),
-                        });
-                      }}>
+                      <Button variant="ghost" size="icon" className="cursor-pointer h-7 w-7 text-destructive" onClick={() => void routerDeleteWithConfirm(`/dashboard/transport/buses/${bus.id}`, { title: "Delete this bus?", onSuccess: () => toast.success("Deleted"), onError: () => toast.error("Failed to delete") })}>
                         <Trash2 className="h-3.5 w-3.5" />
                       </Button>
                     </div>
@@ -442,13 +437,7 @@ function TransportContent({ routes, buses, assignments, students }: PageProps) {
                         <CardTitle className="text-base">{route.routeName}</CardTitle>
                         <p className="text-xs text-muted-foreground mt-0.5">#{route.routeNumber} · Morning: {route.morningStartTime ?? "—"} · Afternoon: {route.afternoonStartTime ?? "—"}</p>
                       </div>
-                      <Button variant="ghost" size="icon" className="cursor-pointer h-7 w-7 text-destructive" onClick={() => {
-                        router.delete(`/dashboard/transport/routes/${route.id}`, {
-                          preserveScroll: true,
-                          onSuccess: () => toast.success("Deleted"),
-                          onError: () => toast.error("Failed to delete"),
-                        });
-                      }}>
+                      <Button variant="ghost" size="icon" className="cursor-pointer h-7 w-7 text-destructive" onClick={() => void routerDeleteWithConfirm(`/dashboard/transport/routes/${route.id}`, { title: "Delete this route?", onSuccess: () => toast.success("Deleted"), onError: () => toast.error("Failed to delete") })}>
                         <Trash2 className="h-4 w-4" />
                       </Button>
                     </div>
@@ -570,13 +559,7 @@ function TransportContent({ routes, buses, assignments, students }: PageProps) {
                             <td className="py-2 pr-4">{route?.routeName ?? "—"}</td>
                             <td className="py-2 pr-4 text-muted-foreground">{a.pickupStop || "—"}</td>
                             <td className="py-2">
-                              <Button variant="ghost" size="icon" className="cursor-pointer h-7 w-7 text-destructive" onClick={() => {
-                                router.delete(`/dashboard/transport/assignments/${a.id}`, {
-                                  preserveScroll: true,
-                                  onSuccess: () => toast.success("Removed"),
-                                  onError: () => toast.error("Failed to remove"),
-                                });
-                              }}>
+                              <Button variant="ghost" size="icon" className="cursor-pointer h-7 w-7 text-destructive" onClick={() => void routerDeleteWithConfirm(`/dashboard/transport/assignments/${a.id}`, { title: "Remove this assignment?", onSuccess: () => toast.success("Removed"), onError: () => toast.error("Failed to remove") })}>
                                 <Trash2 className="h-3.5 w-3.5" />
                               </Button>
                             </td>
