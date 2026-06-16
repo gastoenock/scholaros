@@ -2,14 +2,37 @@ export type AuthUser = {
   id: number;
   name: string;
   email: string;
-  role?: "superadmin" | "admin" | "teacher" | "student" | "parent" | null;
+  role?: "superadmin" | "landlord" | "admin" | "teacher" | "student" | "parent" | null;
+  accountType?: "platform" | "tenant";
   schoolId?: number | null;
   avatar?: string | null;
   phone?: string | null;
 };
 
+export type PlatformTenant = {
+  id: number;
+  name: string;
+  slug: string;
+  isActive: boolean;
+  plan: string;
+};
+
 export type SharedPageProps = {
   auth: { user: AuthUser | null };
+  platform: {
+    isPlatformAdmin: boolean;
+    manageTenantId: number | null;
+    manageTenantName: string | null;
+    tenants: PlatformTenant[];
+  };
+  tenancyHost: {
+    isCentral: boolean;
+    isTenant: boolean;
+    centralDomain: string;
+    centralUrl: string;
+    tenantSlug: string | null;
+    tenantName: string | null;
+  };
   flash: { success?: string | null; error?: string | null };
 };
 

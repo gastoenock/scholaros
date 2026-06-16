@@ -10,7 +10,7 @@ return new class extends Migration
     {
         Schema::create('bus_routes', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('school_id')->constrained('schools')->cascadeOnDelete();
+            $table->unsignedBigInteger('school_id')->index();
             $table->string('route_name');
             $table->string('route_number');
             $table->json('stops');
@@ -23,7 +23,7 @@ return new class extends Migration
 
         Schema::create('buses', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('school_id')->constrained('schools')->cascadeOnDelete();
+            $table->unsignedBigInteger('school_id')->index();
             $table->string('bus_number');
             $table->string('plate_number');
             $table->unsignedInteger('capacity');
@@ -43,7 +43,7 @@ return new class extends Migration
 
         Schema::create('transport_assignments', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('school_id')->constrained('schools')->cascadeOnDelete();
+            $table->unsignedBigInteger('school_id')->index();
             $table->foreignId('student_id')->constrained('students')->cascadeOnDelete();
             $table->foreignId('bus_id')->constrained('buses')->cascadeOnDelete();
             $table->foreignId('route_id')->constrained('bus_routes')->cascadeOnDelete();
@@ -57,7 +57,7 @@ return new class extends Migration
 
         Schema::create('dorm_rooms', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('school_id')->constrained('schools')->cascadeOnDelete();
+            $table->unsignedBigInteger('school_id')->index();
             $table->string('room_number');
             $table->string('dorm_block')->nullable();
             $table->unsignedInteger('floor')->nullable();
@@ -76,7 +76,7 @@ return new class extends Migration
 
         Schema::create('dorm_allocations', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('school_id')->constrained('schools')->cascadeOnDelete();
+            $table->unsignedBigInteger('school_id')->index();
             $table->foreignId('room_id')->constrained('dorm_rooms')->cascadeOnDelete();
             $table->foreignId('student_id')->constrained('students')->cascadeOnDelete();
             $table->string('academic_year');
@@ -90,13 +90,13 @@ return new class extends Migration
 
         Schema::create('maintenance_requests', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('school_id')->constrained('schools')->cascadeOnDelete();
+            $table->unsignedBigInteger('school_id')->index();
             $table->string('location');
             $table->string('location_type');
             $table->string('title');
             $table->text('description');
             $table->string('priority')->default('medium');
-            $table->foreignId('reported_by')->nullable()->constrained('users')->nullOnDelete();
+            $table->unsignedBigInteger('reported_by')->nullable()->index();
             $table->string('assigned_to')->nullable();
             $table->string('status')->default('open');
             $table->string('resolved_at')->nullable();
@@ -108,7 +108,7 @@ return new class extends Migration
 
         Schema::create('security_logs', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('school_id')->constrained('schools')->cascadeOnDelete();
+            $table->unsignedBigInteger('school_id')->index();
             $table->string('person_name');
             $table->string('person_type');
             $table->string('purpose')->nullable();
@@ -117,7 +117,7 @@ return new class extends Migration
             $table->string('host_name')->nullable();
             $table->string('id_type')->nullable();
             $table->string('id_number')->nullable();
-            $table->foreignId('logged_by')->nullable()->constrained('users')->nullOnDelete();
+            $table->unsignedBigInteger('logged_by')->nullable()->index();
             $table->timestamps();
             $table->softDeletes();
 

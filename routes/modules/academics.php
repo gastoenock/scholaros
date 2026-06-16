@@ -18,6 +18,9 @@ Route::post('/academics/exams', [AcademicsController::class, 'storeExam'])->name
 Route::put('/academics/exams/{exam}', [AcademicsController::class, 'updateExam'])->name('academics.exams.update');
 Route::delete('/academics/exams/{exam}', [AcademicsController::class, 'destroyExam'])->name('academics.exams.destroy');
 Route::post('/academics/exams/{exam}/results', [AcademicsController::class, 'bulkSaveExamResults'])->name('academics.exams.results');
+Route::post('/academics/exams/{exam}/results/single', [AcademicsController::class, 'storeExamResult'])->name('academics.exams.results.single');
+Route::post('/academics/exams/{exam}/results/import', [AcademicsController::class, 'importExamResults'])->name('academics.exams.results.import');
+Route::get('/academics/exams/{exam}/results/template', [AcademicsController::class, 'downloadExamResultsTemplate'])->name('academics.exams.results.template');
 
 Route::post('/academics/online-classes', [AcademicsController::class, 'storeOnlineClass'])->name('academics.online-classes.store');
 Route::put('/academics/online-classes/{onlineClass}', [AcademicsController::class, 'updateOnlineClass'])->name('academics.online-classes.update');

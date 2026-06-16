@@ -9,6 +9,7 @@ use App\Models\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -71,7 +72,7 @@ class MessageController extends Controller
             ->all();
 
         $schoolUsers = $schoolId
-            ? User::where('school_id', $schoolId)
+            ? User::query()
                 ->where('id', '!=', $userId)
                 ->orderBy('name')
                 ->get()
@@ -122,11 +123,10 @@ class MessageController extends Controller
     public function store(Request $request): RedirectResponse
     {
         $user = Auth::user();
-        $schoolId = $this->schoolId();
-        abort_unless($schoolId, 403);
+        $schoolId = $this->requireTenancy();
 
         $validated = $request->validate([
-            'receiverId' => ['required', 'integer', 'exists:users,id'],
+            'receiverId' => ['required', 'integer', Rule::exists(User::class, 'id')],
             'subject' => ['nullable', 'string', 'max:255'],
             'body' => ['required', 'string'],
             'parentMessageId' => ['nullable', 'integer', 'exists:messages,id'],
@@ -159,7 +159,7 @@ class MessageController extends Controller
         $userId = Auth::id();
 
         $validated = $request->validate([
-            'with' => ['required', 'integer', 'exists:users,id'],
+            'with' => ['required', 'integer', Rule::exists(User::class, 'id')],
         ]);
 
         Message::where('sender_id', $validated['with'])

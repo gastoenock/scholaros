@@ -47,7 +47,7 @@ class NotificationController extends Controller
         $user = Auth::user();
         $schoolId = $this->schoolId();
         abort_unless($schoolId, 403);
-        abort_unless(in_array($user->role, ['admin', 'superadmin'], true), 403);
+        abort_unless($user?->isPlatformAdmin() || $user?->role === 'admin', 403);
 
         $validated = $request->validate([
             'title' => ['required', 'string', 'max:255'],
@@ -55,7 +55,7 @@ class NotificationController extends Controller
         ]);
 
         // Notify all users in the school (mirrors Convex broadcastAnnouncement).
-        $userIds = User::where('school_id', $schoolId)->pluck('id');
+        $userIds = User::query()->pluck('id');
 
         foreach ($userIds as $userId) {
             Notification::create([

@@ -8,7 +8,7 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::create('schools', function (Blueprint $table) {
+        Schema::create('tenants', function (Blueprint $table) {
             $table->id();
             $table->string('name');
             $table->string('slug')->unique();
@@ -20,26 +20,19 @@ return new class extends Migration
             $table->string('email')->nullable();
             $table->string('website')->nullable();
             $table->string('logo')->nullable();
-            $table->foreignId('admin_id')->nullable()->constrained('users')->nullOnDelete();
+            $table->unsignedBigInteger('admin_id')->nullable()->index();
             $table->boolean('is_active')->default(true);
             $table->string('plan')->default('trial');
+            $table->json('data')->nullable();
             $table->timestamps();
             $table->softDeletes();
         });
 
-        Schema::create('school_branches', function (Blueprint $table) {
+        Schema::create('domains', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('school_id')->constrained('schools')->cascadeOnDelete();
-            $table->string('code')->nullable();
-            $table->string('name');
-            $table->string('address')->nullable();
-            $table->string('phone')->nullable();
-            $table->string('principal_name')->nullable();
-            $table->boolean('is_active')->default(true);
+            $table->string('domain')->unique();
+            $table->foreignId('tenant_id')->constrained('tenants')->cascadeOnDelete();
             $table->timestamps();
-            $table->softDeletes();
-
-            $table->unique(['school_id', 'code']);
         });
 
         Schema::create('school_applications', function (Blueprint $table) {
@@ -61,7 +54,7 @@ return new class extends Migration
     public function down(): void
     {
         Schema::dropIfExists('school_applications');
-        Schema::dropIfExists('school_branches');
-        Schema::dropIfExists('schools');
+        Schema::dropIfExists('domains');
+        Schema::dropIfExists('tenants');
     }
 };

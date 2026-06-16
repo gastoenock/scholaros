@@ -2,23 +2,29 @@
 
 namespace App\Providers;
 
+use App\Models\School;
+use App\Support\TenancyUrl;
 use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
 {
-    /**
-     * Register any application services.
-     */
     public function register(): void
     {
         //
     }
 
-    /**
-     * Bootstrap any application services.
-     */
     public function boot(): void
     {
-        //
+        School::created(function (School $school): void {
+            TenancyUrl::syncSchoolDomain($school);
+        });
+
+        School::updated(function (School $school): void {
+            if ($school->wasChanged('slug')) {
+                $school->domains()
+                    ->where('domain', $school->getOriginal('slug'))
+                    ->update(['domain' => $school->slug]);
+            }
+        });
     }
 }

@@ -135,6 +135,7 @@ function AttendanceContent({ classes, students, staff, records }: PageProps) {
           </div>
           <div className="flex items-center gap-3">
             <input
+              title="date"
               type="date"
               value={date}
               onChange={(e) => { setDate(e.target.value); setAttendanceMap({}); }}

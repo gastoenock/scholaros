@@ -73,7 +73,8 @@ return [
     |
     */
 
-    'connection' => env('SESSION_CONNECTION'),
+    // Always store sessions on the central connection — tenant DBs have no sessions table.
+    'connection' => env('SESSION_CONNECTION', env('DB_CENTRAL_CONNECTION', 'central')),
 
     /*
     |--------------------------------------------------------------------------

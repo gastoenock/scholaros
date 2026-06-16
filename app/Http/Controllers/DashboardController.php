@@ -18,7 +18,13 @@ class DashboardController extends Controller
     {
         $user = auth()->user();
 
-        if ($user?->isSuperadmin()) {
+        if ($user?->isPlatformAdmin()) {
+            $schoolId = $this->schoolId();
+
+            if ($schoolId && tenancy()->initialized) {
+                return Inertia::render('dashboard/page', $this->schoolDashboardPayload($schoolId));
+            }
+
             return Inertia::render('dashboard/page', [
                 'school' => null,
                 'stats' => null,
@@ -40,6 +46,14 @@ class DashboardController extends Controller
             ]);
         }
 
+        return Inertia::render('dashboard/page', $this->schoolDashboardPayload($schoolId));
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function schoolDashboardPayload(int $schoolId): array
+    {
         $today = now()->toDateString();
         $todayRecords = AttendanceRecord::forSchool($schoolId)->where('date', $today)->get();
         $presentToday = $todayRecords->whereIn('status', ['present', 'late'])->count();
@@ -58,7 +72,7 @@ class DashboardController extends Controller
                 ->sum('amount'),
         ];
 
-        return Inertia::render('dashboard/page', [
+        return [
             'school' => $this->school(),
             'stats' => $stats,
             'recentAdmissions' => Admission::forSchool($schoolId)
@@ -67,6 +81,6 @@ class DashboardController extends Controller
                 ->get(),
             'schools' => [],
             'applications' => [],
-        ]);
+        ];
     }
 }

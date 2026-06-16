@@ -28,7 +28,6 @@ export type AdminUser = {
   name: string;
   email: string;
   role?: string | null;
-  schoolId?: number | null;
   isActive?: boolean;
   createdAt: string;
 };
@@ -122,7 +121,7 @@ function UserRoleRow({ user }: { user: AdminUser }) {
       <Select value={user.role ?? "parent"} onValueChange={handleRoleChange}>
         <SelectTrigger className="w-36 cursor-pointer"><SelectValue /></SelectTrigger>
         <SelectContent>
-          {["superadmin", "admin", "teacher", "student", "parent"].map((r) => (
+          {["superadmin", "landlord"].map((r) => (
             <SelectItem key={r} value={r} className="cursor-pointer capitalize">{r}</SelectItem>
           ))}
         </SelectContent>
@@ -132,15 +131,15 @@ function UserRoleRow({ user }: { user: AdminUser }) {
 }
 
 function AdminContent({ applications, users }: PageProps) {
-  const { auth } = usePage<SharedPageProps>().props;
+  const { platform } = usePage<SharedPageProps>().props;
 
-  if (auth.user?.role !== "superadmin") {
+  if (!platform?.isPlatformAdmin) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
         <div className="text-center space-y-3">
           <XCircle className="h-7 w-7 text-destructive mx-auto" />
           <h2 className="text-xl font-bold">Access Denied</h2>
-          <p className="text-muted-foreground">You need superadmin privileges to access this page.</p>
+          <p className="text-muted-foreground">You need platform administrator privileges to access this page.</p>
         </div>
       </div>
     );
@@ -177,7 +176,7 @@ function AdminContent({ applications, users }: PageProps) {
 
       <div>
         <h2 className="text-base font-semibold mb-4 flex items-center gap-2">
-          <User className="h-4 w-4" /> User Roles
+          <User className="h-4 w-4" /> Platform Users
         </h2>
         <div className="space-y-2">
           {users.map((user) => <UserRoleRow key={user.id} user={user} />)}

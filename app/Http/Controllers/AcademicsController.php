@@ -11,13 +11,20 @@ use App\Models\Staff;
 use App\Models\Student;
 use App\Models\Subject;
 use App\Models\Submission;
+use App\Services\ExamResultService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\UploadedFile;
 use Inertia\Inertia;
 use Inertia\Response;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class AcademicsController extends Controller
 {
+    public function __construct(
+        private ExamResultService $examResults,
+    ) {}
+
     public function index(): Response
     {
         $schoolId = $this->schoolId();
@@ -51,7 +58,7 @@ class AcademicsController extends Controller
                 'studentName' => $student
                     ? trim("{$student->first_name} {$student->last_name}")
                     : 'Unknown',
-                'studentId' => $student?->student_id ?? '',
+                'studentIdLabel' => $student?->student_id ?? '',
             ]);
         })->values();
 
@@ -66,6 +73,7 @@ class AcademicsController extends Controller
             'staff' => $staff,
             'students' => $students->values(),
             'school' => $this->school(),
+            'canUploadExamResults' => $this->examResults->canManageResults(auth()->user()),
         ]);
     }
 
@@ -243,6 +251,7 @@ class AcademicsController extends Controller
     public function bulkSaveExamResults(Request $request, Exam $exam): RedirectResponse
     {
         abort_unless($exam->school_id === $this->schoolId(), 403);
+        $this->examResults->assertCanManageResults(auth()->user());
 
         $validated = $request->validate([
             'results' => ['required', 'array'],
@@ -252,22 +261,69 @@ class AcademicsController extends Controller
             'results.*.remarks' => ['nullable', 'string'],
         ]);
 
-        foreach ($validated['results'] as $row) {
-            ExamResult::updateOrCreate(
-                [
-                    'exam_id' => $exam->id,
-                    'student_id' => $row['studentId'],
-                ],
-                [
-                    'school_id' => $exam->school_id,
-                    'score' => $row['score'],
-                    'grade' => $row['grade'] ?? null,
-                    'remarks' => $row['remarks'] ?? null,
-                ]
-            );
-        }
+        $saved = $this->examResults->saveBulk($exam, $validated['results']);
 
-        return back()->with('success', 'Results saved');
+        return back()->with('success', "{$saved} result(s) saved.");
+    }
+
+    public function storeExamResult(Request $request, Exam $exam): RedirectResponse
+    {
+        abort_unless($exam->school_id === $this->schoolId(), 403);
+        $this->examResults->assertCanManageResults(auth()->user());
+
+        $validated = $request->validate([
+            'studentId' => ['nullable', 'integer', 'exists:students,id'],
+            'studentNumber' => ['nullable', 'string', 'max:50'],
+            'score' => ['required', 'numeric'],
+            'grade' => ['nullable', 'string', 'max:10'],
+            'remarks' => ['nullable', 'string', 'max:1000'],
+        ]);
+
+        abort_unless($validated['studentId'] || $validated['studentNumber'], 422, 'Select a student.');
+
+        $this->examResults->saveSingle($exam, $validated);
+
+        return back()->with('success', 'Exam result saved.');
+    }
+
+    public function importExamResults(Request $request, Exam $exam): RedirectResponse
+    {
+        abort_unless($exam->school_id === $this->schoolId(), 403);
+        $this->examResults->assertCanManageResults(auth()->user());
+
+        $validated = $request->validate([
+            'file' => [
+                'required',
+                'file',
+                'max:5120',
+                function (string $attribute, $value, \Closure $fail): void {
+                    if (! $value instanceof UploadedFile) {
+                        return;
+                    }
+
+                    $extension = strtolower($value->getClientOriginalExtension());
+
+                    if (! in_array($extension, ['csv', 'txt', 'xlsx', 'xls'], true)) {
+                        $fail('Upload a spreadsheet file (.xlsx, .xls, or .csv).');
+                    }
+                },
+            ],
+        ]);
+
+        $summary = $this->examResults->importSpreadsheet($exam, $validated['file']);
+
+        return back()->with(
+            'success',
+            "{$summary['imported']} result(s) imported.".($summary['skipped'] > 0 ? " {$summary['skipped']} empty row(s) skipped." : ''),
+        );
+    }
+
+    public function downloadExamResultsTemplate(Exam $exam): StreamedResponse
+    {
+        abort_unless($exam->school_id === $this->schoolId(), 403);
+        $this->examResults->assertCanManageResults(auth()->user());
+
+        return $this->examResults->downloadTemplate($exam);
     }
 
     public function storeOnlineClass(Request $request): RedirectResponse
@@ -343,6 +399,7 @@ class AcademicsController extends Controller
             'staff' => [],
             'students' => [],
             'school' => null,
+            'canUploadExamResults' => false,
         ];
     }
 }

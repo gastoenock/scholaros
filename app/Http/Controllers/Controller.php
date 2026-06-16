@@ -8,18 +8,33 @@ use Illuminate\Support\Str;
 abstract class Controller
 {
     /**
-     * The current user's school id (multi-tenant scope).
+     * The current tenant school id. Only available when tenancy is initialized.
      */
     protected function schoolId(): ?int
     {
-        return auth()->user()?->school_id;
+        if (! tenancy()->initialized) {
+            return null;
+        }
+
+        return (int) tenant('id');
     }
 
     protected function school(): ?School
     {
-        $id = $this->schoolId();
+        if (tenancy()->initialized && tenant() instanceof School) {
+            return tenant();
+        }
 
-        return $id ? School::with('branches')->find($id) : null;
+        return null;
+    }
+
+    protected function requireTenancy(): int
+    {
+        $schoolId = $this->schoolId();
+
+        abort_unless($schoolId, 403, 'School context is not available.');
+
+        return $schoolId;
     }
 
     /**

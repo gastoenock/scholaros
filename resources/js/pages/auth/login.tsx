@@ -12,7 +12,13 @@ import {
   CardTitle,
 } from "@/components/ui/card.tsx";
 
-export default function LoginPage() {
+type PageProps = {
+  school: { name: string; slug: string } | null;
+  platformLoginUrl: string;
+  centralDomain: string;
+};
+
+export default function LoginPage({ school, platformLoginUrl, centralDomain }: PageProps) {
   const { data, setData, post, processing, errors } = useForm({
     email: "",
     password: "",
@@ -26,7 +32,7 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4">
-      <Head title="Sign In" />
+      <Head title={school ? `${school.name} Sign In` : "School Sign In"} />
       <Link href="/" className="flex items-center gap-2 mb-8">
         <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center">
           <GraduationCap className="h-6 w-6 text-primary-foreground" />
@@ -36,8 +42,12 @@ export default function LoginPage() {
 
       <Card className="w-full max-w-md">
         <CardHeader>
-          <CardTitle>Welcome back</CardTitle>
-          <CardDescription>Sign in to your account to continue.</CardDescription>
+          <CardTitle>{school ? school.name : "School sign in"}</CardTitle>
+          <CardDescription>
+            {school
+              ? `Sign in to ${school.slug}.${centralDomain}`
+              : "Sign in with your school account."}
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
@@ -94,10 +104,10 @@ export default function LoginPage() {
               </Link>
             </p>
             <p>
-              Want to register your school?{" "}
-              <Link href="/register" className="text-primary font-medium hover:underline">
-                Apply here
-              </Link>
+              Platform administrator?{" "}
+              <a href={platformLoginUrl} className="text-primary font-medium hover:underline">
+                Platform sign in
+              </a>
             </p>
           </div>
         </CardContent>

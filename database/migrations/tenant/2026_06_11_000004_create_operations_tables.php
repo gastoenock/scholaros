@@ -10,7 +10,7 @@ return new class extends Migration
     {
         Schema::create('timetable_slots', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('school_id')->constrained('schools')->cascadeOnDelete();
+            $table->unsignedBigInteger('school_id')->index();
             $table->foreignId('class_id')->constrained('classes')->cascadeOnDelete();
             $table->string('day');
             $table->unsignedInteger('period');
@@ -26,13 +26,13 @@ return new class extends Migration
 
         Schema::create('attendance_records', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('school_id')->constrained('schools')->cascadeOnDelete();
+            $table->unsignedBigInteger('school_id')->index();
             $table->string('date');
             $table->string('type');
             $table->string('person_id');
             $table->string('status');
             $table->foreignId('class_id')->nullable()->constrained('classes')->nullOnDelete();
-            $table->foreignId('marked_by')->nullable()->constrained('users')->nullOnDelete();
+            $table->unsignedBigInteger('marked_by')->nullable()->index();
             $table->text('note')->nullable();
             $table->timestamps();
             $table->softDeletes();
@@ -43,7 +43,7 @@ return new class extends Migration
 
         Schema::create('admissions', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('school_id')->constrained('schools')->cascadeOnDelete();
+            $table->unsignedBigInteger('school_id')->index();
             $table->foreignId('school_branch_id')->nullable()->constrained('school_branches')->nullOnDelete();
             $table->string('first_name');
             $table->string('last_name');
@@ -67,8 +67,8 @@ return new class extends Migration
 
         Schema::create('notifications', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('school_id')->constrained('schools')->cascadeOnDelete();
-            $table->foreignId('user_id')->constrained('users')->cascadeOnDelete();
+            $table->unsignedBigInteger('school_id')->index();
+            $table->unsignedBigInteger('user_id')->index();
             $table->string('title');
             $table->text('message');
             $table->string('type')->default('general');
@@ -82,9 +82,9 @@ return new class extends Migration
 
         Schema::create('messages', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('school_id')->constrained('schools')->cascadeOnDelete();
-            $table->foreignId('sender_id')->constrained('users')->cascadeOnDelete();
-            $table->foreignId('receiver_id')->constrained('users')->cascadeOnDelete();
+            $table->unsignedBigInteger('school_id')->index();
+            $table->unsignedBigInteger('sender_id')->index();
+            $table->unsignedBigInteger('receiver_id')->index();
             $table->string('subject')->nullable();
             $table->text('body');
             $table->boolean('is_read')->default(false);

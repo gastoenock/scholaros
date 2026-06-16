@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { router } from "@inertiajs/react";
 import { DashboardLayout } from "../_components/layout.tsx";
 import { useCurrentSchool } from "../_components/use-current-school.ts";
@@ -15,9 +15,10 @@ import { toast } from "sonner";
 import { routerDeleteWithConfirm } from "@/lib/confirm.ts";
 import { motion } from "motion/react";
 import {
-  BookOpen, Plus, Pencil, Trash2, ClipboardList, Video,
-  GraduationCap, CheckCircle2, BarChart3, ExternalLink,
-} from "lucide-react";
+          BookOpen, Plus, Pencil, Trash2, ClipboardList, Video,
+          GraduationCap, CheckCircle2, BarChart3, ExternalLink, Upload, Download,
+          ChevronDown, ChevronUp,
+        } from "lucide-react";
 import { format } from "date-fns";
 import type { StaffMember } from "../staff/page.tsx";
 import type { Student } from "../students/page.tsx";
@@ -37,7 +38,16 @@ type Subject = { id: number; name: string; code?: string | null; gradeLevel?: st
 type SchoolClass = { id: number; name: string; gradeLevel?: string | null; section?: string | null };
 type Assignment = { id: number; classId: number; subjectId: number; teacherId: number; title: string; description?: string | null; dueDate: string; maxScore: number; type: string };
 type Exam = { id: number; classId: number; subjectId: number; title: string; examDate: string; startTime?: string | null; endTime?: string | null; maxScore: number; passingScore?: number | null; term?: string | null; academicYear: string; venue?: string | null };
-type ExamResult = { id: number; examId: number; studentId: number; score: number; grade?: string | null; studentName: string; studentIdLabel?: string };
+type ExamResult = {
+  id: number;
+  examId: number;
+  studentId: number;
+  score: number;
+  grade?: string | null;
+  remarks?: string | null;
+  studentName: string;
+  studentIdLabel?: string;
+};
 type OnlineClass = { id: number; classId: number; subjectId?: number | null; teacherId: number; title: string; zoomLink: string; meetingId?: string | null; passcode?: string | null; scheduledAt: string; durationMinutes?: number | null; status: string };
 type Submission = { id: number; assignmentId: number; studentId: number; score?: number | null; feedback?: string | null; status: string; studentName: string };
 
@@ -52,6 +62,7 @@ type PageProps = {
   staff: StaffMember[];
   students: Student[];
   school: School | null;
+  canUploadExamResults: boolean;
 };
 
 function SubjectsTab({ subjects, staff }: Pick<PageProps, "subjects" | "staff">) {
@@ -116,8 +127,8 @@ function SubjectsTab({ subjects, staff }: Pick<PageProps, "subjects" | "staff">)
                       {s.code && <Badge variant="secondary" className="text-xs mt-1">{s.code}</Badge>}
                     </div>
                     <div className="flex gap-1.5">
-                      <button onClick={() => openEdit(s)} className="p-1.5 rounded hover:bg-muted cursor-pointer"><Pencil className="h-3.5 w-3.5 text-muted-foreground" /></button>
-                      <button onClick={() => handleDelete(s.id)} className="p-1.5 rounded hover:bg-red-50 hover:text-red-600 cursor-pointer"><Trash2 className="h-3.5 w-3.5" /></button>
+                      <button title="Edit" onClick={() => openEdit(s)} className="p-1.5 rounded hover:bg-muted cursor-pointer"><Pencil className="h-3.5 w-3.5 text-muted-foreground" /></button>
+                      <button title="handleDelete" onClick={() => handleDelete(s.id)} className="p-1.5 rounded hover:bg-red-50 hover:text-red-600 cursor-pointer"><Trash2 className="h-3.5 w-3.5" /></button>
                     </div>
                   </div>
                   {s.gradeLevel && <p className="text-xs text-muted-foreground">Grade {s.gradeLevel}</p>}
@@ -228,7 +239,7 @@ function AssignmentsTab({ assignments, classes, subjects, staff, submissions }: 
                       <Button size="sm" variant="secondary" onClick={() => { setSelectedAssignment(a.id); setGradingOpen(true); }} className="cursor-pointer">
                         <ClipboardList className="h-3.5 w-3.5 mr-1" /> Grade
                       </Button>
-                      <button onClick={() => void routerDeleteWithConfirm(`/dashboard/academics/assignments/${a.id}`, { title: "Delete this assignment?" })} className="p-1.5 rounded hover:bg-red-50 hover:text-red-600 cursor-pointer"><Trash2 className="h-3.5 w-3.5" /></button>
+                      <button title="Delete" onClick={() => void routerDeleteWithConfirm(`/dashboard/academics/assignments/${a.id}`, { title: "Delete this assignment?" })} className="p-1.5 rounded hover:bg-red-50 hover:text-red-600 cursor-pointer"><Trash2 className="h-3.5 w-3.5" /></button>
                     </div>
                   </div>
                 </CardContent>
@@ -317,12 +328,19 @@ function AssignmentsTab({ assignments, classes, subjects, staff, submissions }: 
   );
 }
 
-function ExamsTab({ exams, classes, subjects, students, examResults }: Pick<PageProps, "exams" | "classes" | "subjects" | "students" | "examResults">) {
+function ExamsTab({ exams, classes, subjects, students, examResults, canUploadExamResults }: Pick<PageProps, "exams" | "classes" | "subjects" | "students" | "examResults" | "canUploadExamResults">) {
   const [open, setOpen] = useState(false);
   const [resultsOpen, setResultsOpen] = useState(false);
+  const [resultsTab, setResultsTab] = useState<"manual" | "single" | "bulk">("manual");
   const [selectedExam, setSelectedExam] = useState<Exam | null>(null);
   const [form, setForm] = useState({ classId: "", subjectId: "", title: "", examDate: "", startTime: "", endTime: "", maxScore: "100", passingScore: "50", term: "Term 1", academicYear: "2024-2025", venue: "" });
   const [resultScores, setResultScores] = useState<Record<string, string>>({});
+  const [resultRemarks, setResultRemarks] = useState<Record<string, string>>({});
+  const [singleForm, setSingleForm] = useState({ studentId: "", score: "", grade: "", remarks: "" });
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [expandedResultIds, setExpandedResultIds] = useState<Set<number>>(new Set());
+  const uploadInputRef = useRef<HTMLInputElement>(null);
 
   const examResultsForSelected = useMemo(
     () => (selectedExam ? examResults.filter((r) => r.examId === selectedExam.id) : []),
@@ -332,8 +350,71 @@ function ExamsTab({ exams, classes, subjects, students, examResults }: Pick<Page
   const classStudentsForExam = useMemo(() => {
     if (!selectedExam) return [];
     const cls = classes.find((c) => c.id === selectedExam.classId);
-    return students.filter((s) => s.classSection === cls?.name);
+    if (!cls) return [];
+    return students.filter((s) =>
+      s.gradeLevel === cls.gradeLevel &&
+      (!cls.section || s.classSection === cls.section),
+    );
   }, [selectedExam, classes, students]);
+
+  const uploadedStudentIds = useMemo(
+    () => new Set(examResultsForSelected.map((r) => r.studentId)),
+    [examResultsForSelected],
+  );
+
+  const studentsWithoutResults = useMemo(
+    () => classStudentsForExam.filter((s) => !uploadedStudentIds.has(s.id)),
+    [classStudentsForExam, uploadedStudentIds],
+  );
+
+  const buildEditableState = (exam: Exam) => {
+    const existing = examResults.filter((r) => r.examId === exam.id);
+    const scores: Record<string, string> = {};
+    const remarks: Record<string, string> = {};
+
+    existing.forEach((result) => {
+      scores[String(result.studentId)] = String(result.score);
+      if (result.remarks) {
+        remarks[String(result.studentId)] = result.remarks;
+      }
+    });
+
+    setResultScores(scores);
+    setResultRemarks(remarks);
+  };
+
+  const openResultsDialog = (exam: Exam) => {
+    setSelectedExam(exam);
+    buildEditableState(exam);
+    setExpandedResultIds(new Set());
+    setSingleForm({ studentId: "", score: "", grade: "", remarks: "" });
+    setUploadFile(null);
+    if (uploadInputRef.current) {
+      uploadInputRef.current.value = "";
+    }
+    setResultsTab(examResults.some((r) => r.examId === exam.id) ? "manual" : "single");
+    setResultsOpen(true);
+  };
+
+  const toggleResultExpanded = (studentId: number) => {
+    setExpandedResultIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(studentId)) {
+        next.delete(studentId);
+      } else {
+        next.add(studentId);
+      }
+      return next;
+    });
+  };
+
+  const displayScoreForResult = (result: ExamResult) => {
+    const edited = resultScores[String(result.studentId)]?.trim();
+    if (edited) {
+      return parseFloat(edited);
+    }
+    return result.score;
+  };
 
   const handleCreate = () => {
     if (!form.classId || !form.subjectId || !form.title || !form.examDate) return;
@@ -354,14 +435,97 @@ function ExamsTab({ exams, classes, subjects, students, examResults }: Pick<Page
 
   const handleBulkSave = () => {
     if (!selectedExam) return;
-    const results = classStudentsForExam.map((s) => ({
-      studentId: s.id,
-      score: parseFloat(resultScores[String(s.id)] ?? "0"),
-      grade: letterGrade(parseFloat(resultScores[String(s.id)] ?? "0"), selectedExam.maxScore),
-    }));
+
+    const results = examResultsForSelected
+      .map((result) => {
+        const scoreValue = resultScores[String(result.studentId)]?.trim();
+
+        if (!scoreValue) {
+          return null;
+        }
+
+        return {
+          studentId: result.studentId,
+          score: parseFloat(scoreValue),
+          grade: letterGrade(parseFloat(scoreValue), selectedExam.maxScore),
+          remarks: resultRemarks[String(result.studentId)]?.trim() || undefined,
+        };
+      })
+      .filter((result): result is NonNullable<typeof result> => result !== null);
+
+    if (results.length === 0) {
+      toast.error("Enter a score for at least one uploaded result.");
+      return;
+    }
+
     router.post(`/dashboard/academics/exams/${selectedExam.id}/results`, { results }, {
       preserveScroll: true,
-      onSuccess: () => { toast.success("Results saved"); setResultsOpen(false); },
+      onSuccess: () => {
+        toast.success("Results updated");
+        setResultsOpen(false);
+      },
+      onError: () => toast.error("Failed to save results"),
+    });
+  };
+
+  const handleSingleSave = () => {
+    if (!selectedExam || !singleForm.studentId || !singleForm.score) {
+      toast.error("Select a student and enter a score.");
+      return;
+    }
+
+    router.post(`/dashboard/academics/exams/${selectedExam.id}/results/single`, {
+      studentId: parseInt(singleForm.studentId, 10),
+      score: parseFloat(singleForm.score),
+      grade: singleForm.grade || undefined,
+      remarks: singleForm.remarks || undefined,
+    }, {
+      preserveScroll: true,
+      onSuccess: () => {
+        toast.success("Result saved");
+        setSingleForm({ studentId: "", score: "", grade: "", remarks: "" });
+        setResultsTab("manual");
+      },
+      onError: () => toast.error("Failed to save result"),
+    });
+  };
+
+  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    setUploadFile(event.target.files?.[0] ?? null);
+  };
+
+  const clearSelectedFile = () => {
+    setUploadFile(null);
+    if (uploadInputRef.current) {
+      uploadInputRef.current.value = "";
+    }
+  };
+
+  const handleImport = (event?: React.FormEvent) => {
+    event?.preventDefault();
+
+    if (!selectedExam || !uploadFile) {
+      toast.error("Choose an Excel or CSV file to upload.");
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append("file", uploadFile);
+    setUploading(true);
+
+    router.post(`/dashboard/academics/exams/${selectedExam.id}/results/import`, formData, {
+      forceFormData: true,
+      preserveScroll: true,
+      onSuccess: () => {
+        toast.success("Results imported");
+        clearSelectedFile();
+        setResultsTab("manual");
+      },
+      onError: (errors) => {
+        const message = errors.file ?? errors.message;
+        toast.error(typeof message === "string" ? message : "Import failed. Check the template and try again.");
+      },
+      onFinish: () => setUploading(false),
     });
   };
 
@@ -390,10 +554,17 @@ function ExamsTab({ exams, classes, subjects, students, examResults }: Pick<Page
                       </div>
                     </div>
                     <div className="flex gap-2 shrink-0">
-                      <Button size="sm" variant="secondary" onClick={() => { setSelectedExam(e); setResultScores({}); setResultsOpen(true); }} className="cursor-pointer">
-                        <ClipboardList className="h-3.5 w-3.5 mr-1" />Results
-                      </Button>
-                      <button onClick={() => void routerDeleteWithConfirm(`/dashboard/academics/exams/${e.id}`, { title: "Delete this exam?" })} className="p-1.5 rounded hover:bg-red-50 hover:text-red-600 cursor-pointer"><Trash2 className="h-3.5 w-3.5" /></button>
+                      {canUploadExamResults && (
+                        <Button size="sm" variant="secondary" onClick={() => openResultsDialog(e)} className="cursor-pointer">
+                          <ClipboardList className="h-3.5 w-3.5 mr-1" />Results
+                        </Button>
+                      )}
+                      {!canUploadExamResults && examResults.some((r) => r.examId === e.id) && (
+                        <Button size="sm" variant="outline" onClick={() => openResultsDialog(e)} className="cursor-pointer">
+                          View Results
+                        </Button>
+                      )}
+                      <button title="routeDelete" onClick={() => void routerDeleteWithConfirm(`/dashboard/academics/exams/${e.id}`, { title: "Delete this exam?" })} className="p-1.5 rounded hover:bg-red-50 hover:text-red-600 cursor-pointer"><Trash2 className="h-3.5 w-3.5" /></button>
                     </div>
                   </div>
                 </CardContent>
@@ -440,36 +611,227 @@ function ExamsTab({ exams, classes, subjects, students, examResults }: Pick<Page
       </Dialog>
       <Dialog open={resultsOpen} onOpenChange={setResultsOpen}>
         <DialogContent className="sm:max-w-2xl">
-          <DialogHeader><DialogTitle>Enter Results — {selectedExam?.title}</DialogTitle></DialogHeader>
+          <DialogHeader>
+            <DialogTitle>{canUploadExamResults ? "Upload Results" : "Exam Results"} — {selectedExam?.title}</DialogTitle>
+          </DialogHeader>
           <div className="space-y-2 max-h-[60vh] overflow-y-auto py-2">
-            {examResultsForSelected.length > 0 && (
-              <div className="mb-4 rounded-lg overflow-hidden border">
+            {!canUploadExamResults && examResultsForSelected.length === 0 && (
+              <p className="text-sm text-muted-foreground py-6 text-center">No results have been uploaded for this exam yet.</p>
+            )}
+
+            {!canUploadExamResults && examResultsForSelected.length > 0 && (
+              <div className="rounded-lg overflow-hidden border">
                 <table className="w-full text-sm">
-                  <thead><tr className="bg-muted/30 border-b"><th className="text-left px-3 py-2">Student</th><th className="text-left px-3 py-2">Score</th><th className="text-left px-3 py-2">Grade</th></tr></thead>
+                  <thead><tr className="bg-muted/30 border-b"><th className="text-left px-3 py-2">Student</th><th className="text-left px-3 py-2">Score</th><th className="text-left px-3 py-2">Grade</th><th className="text-left px-3 py-2">Remarks</th></tr></thead>
                   <tbody>
                     {examResultsForSelected.map((r) => (
                       <tr key={r.id} className="border-b last:border-0">
-                        <td className="px-3 py-2">{r.studentName}</td>
+                        <td className="px-3 py-2">
+                          <div>{r.studentName}</div>
+                          {r.studentIdLabel && <div className="text-xs text-muted-foreground font-mono">{r.studentIdLabel}</div>}
+                        </td>
                         <td className="px-3 py-2 font-semibold">{r.score}/{selectedExam?.maxScore}</td>
                         <td className="px-3 py-2"><Badge className="text-xs">{r.grade ?? letterGrade(r.score, selectedExam?.maxScore ?? 100)}</Badge></td>
+                        <td className="px-3 py-2 text-muted-foreground">{r.remarks ?? "—"}</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
             )}
-            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">Enter / Update Scores</p>
-            {classStudentsForExam.map((s) => (
-              <div key={s.id} className="flex items-center gap-3">
-                <span className="text-sm flex-1">{s.firstName} {s.lastName}</span>
-                <Input type="number" className="w-24 h-8" placeholder="Score" value={resultScores[String(s.id)] ?? ""} onChange={(e) => setResultScores((p) => ({ ...p, [String(s.id)]: e.target.value }))} />
-                <span className="text-xs text-muted-foreground w-8">{resultScores[String(s.id)] ? letterGrade(parseFloat(resultScores[String(s.id)]), selectedExam?.maxScore ?? 100) : "—"}</span>
-              </div>
-            ))}
+
+            {canUploadExamResults && selectedExam && (
+              <>
+                <Tabs value={resultsTab} onValueChange={(v) => setResultsTab(v as typeof resultsTab)}>
+                  <TabsList className="grid w-full grid-cols-3">
+                    <TabsTrigger value="manual" className="cursor-pointer">Edit Uploaded</TabsTrigger>
+                    <TabsTrigger value="single" className="cursor-pointer">Add Single</TabsTrigger>
+                    <TabsTrigger value="bulk" className="cursor-pointer">Bulk Upload</TabsTrigger>
+                  </TabsList>
+
+                  <TabsContent value="manual" className="mt-4 space-y-3">
+                    {examResultsForSelected.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">
+                        No results uploaded yet. Use <strong>Add Single</strong> or <strong>Bulk Upload</strong> to add scores.
+                      </p>
+                    ) : (
+                      examResultsForSelected.map((result) => {
+                        const isExpanded = expandedResultIds.has(result.studentId);
+                        const displayScore = displayScoreForResult(result);
+
+                        return (
+                          <div key={result.id} className="rounded-lg border overflow-hidden">
+                            <button
+                              type="button"
+                              className="flex w-full flex-wrap items-center justify-between gap-x-3 gap-y-1 px-3 py-2.5 text-left hover:bg-muted/30 cursor-pointer"
+                              onClick={() => toggleResultExpanded(result.studentId)}
+                              aria-expanded={isExpanded ? "true" : "false"}
+                            >
+                              <span className="text-sm font-medium pr-4">{result.studentName}</span>
+                              {result.studentIdLabel && (
+                                <span className="text-xs text-muted-foreground font-mono pl-4">{result.studentIdLabel}</span>
+                              )}
+                              <span className="text-sm font-semibold whitespace-nowrap px-4">
+                                {displayScore}/{selectedExam.maxScore}
+                              </span>
+                              <Badge variant="secondary" className="text-xs px-4">
+                                {letterGrade(displayScore, selectedExam.maxScore)}
+                              </Badge>
+                              {isExpanded ? (
+                                <ChevronUp className="h-4 w-4 text-muted-foreground" />
+                              ) : (
+                                <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                              )}
+                            </button>
+
+                            {isExpanded && (
+                              <div className="border-t px-3 py-3 space-y-3 bg-muted/10">
+                                <div className="grid grid-cols-2 gap-3">
+                                  <div className="space-y-1.5">
+                                    <Label>Score</Label>
+                                    <Input
+                                      type="number"
+                                      min={0}
+                                      max={selectedExam.maxScore}
+                                      value={resultScores[String(result.studentId)] ?? ""}
+                                      onChange={(e) => setResultScores((prev) => ({ ...prev, [String(result.studentId)]: e.target.value }))}
+                                    />
+                                  </div>
+                                  <div className="space-y-1.5">
+                                    <Label>Grade</Label>
+                                    <Input
+                                      readOnly
+                                      value={
+                                        resultScores[String(result.studentId)]
+                                          ? letterGrade(parseFloat(resultScores[String(result.studentId)]), selectedExam.maxScore)
+                                          : result.grade ?? "—"
+                                      }
+                                    />
+                                  </div>
+                                </div>
+                                <div className="space-y-1.5">
+                                  <Label>Remarks</Label>
+                                  <Textarea
+                                    rows={2}
+                                    value={resultRemarks[String(result.studentId)] ?? ""}
+                                    onChange={(e) => setResultRemarks((prev) => ({ ...prev, [String(result.studentId)]: e.target.value }))}
+                                  />
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })
+                    )}
+                  </TabsContent>
+
+                  <TabsContent value="single" className="mt-4 space-y-3">
+                    {studentsWithoutResults.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">All students in this class already have uploaded results.</p>
+                    ) : (
+                      <>
+                        <div className="space-y-1.5">
+                          <Label>Student *</Label>
+                          <Select value={singleForm.studentId} onValueChange={(v) => setSingleForm((p) => ({ ...p, studentId: v }))}>
+                            <SelectTrigger><SelectValue placeholder="Select student…" /></SelectTrigger>
+                            <SelectContent>
+                              {studentsWithoutResults.map((s) => (
+                                <SelectItem key={s.id} value={String(s.id)}>
+                                  {s.firstName} {s.lastName} ({s.studentId})
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="space-y-1.5">
+                            <Label>Score *</Label>
+                            <Input type="number" min={0} max={selectedExam.maxScore} value={singleForm.score} onChange={(e) => setSingleForm((p) => ({ ...p, score: e.target.value }))} />
+                          </div>
+                          <div className="space-y-1.5">
+                            <Label>Grade</Label>
+                            <Input placeholder="Auto" value={singleForm.grade} onChange={(e) => setSingleForm((p) => ({ ...p, grade: e.target.value }))} />
+                          </div>
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label>Remarks</Label>
+                          <Textarea rows={2} value={singleForm.remarks} onChange={(e) => setSingleForm((p) => ({ ...p, remarks: e.target.value }))} />
+                        </div>
+                      </>
+                    )}
+                  </TabsContent>
+
+                  <TabsContent value="bulk" className="mt-4 space-y-4">
+                    <form
+                      onSubmit={handleImport}
+                      className="space-y-4"
+                      onPointerDown={(event) => event.stopPropagation()}
+                    >
+                      <div className="rounded-lg border bg-muted/20 p-4 space-y-3">
+                        <p className="text-sm text-muted-foreground">
+                          Download the Excel template for students without uploaded results, fill in scores, then upload the file. Required columns: <code className="text-xs">student_id</code>, <code className="text-xs">score</code>.
+                        </p>
+                        <Button variant="outline" size="sm" asChild className="cursor-pointer" type="button">
+                          <a href={`/dashboard/academics/exams/${selectedExam.id}/results/template`}>
+                            <Download className="h-3.5 w-3.5 mr-1.5" />Download Excel Template
+                          </a>
+                        </Button>
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="exam-results-upload">Upload completed spreadsheet</Label>
+                        <input
+                          ref={uploadInputRef}
+                          id="exam-results-upload"
+                          name="file"
+                          type="file"
+                          className="sr-only"
+                          aria-label="Upload exam results spreadsheet"
+                          accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv"
+                          onChange={handleFileChange}
+                          onClick={(event) => event.stopPropagation()}
+                        />
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className="cursor-pointer"
+                            onClick={() => uploadInputRef.current?.click()}
+                          >
+                            <Upload className="h-3.5 w-3.5 mr-1.5" />
+                            Choose File
+                          </Button>
+                          {uploadFile && (
+                            <>
+                              <span className="text-sm text-muted-foreground truncate max-w-[220px]">
+                                {uploadFile.name}
+                              </span>
+                              <Button type="button" variant="ghost" size="sm" className="cursor-pointer" onClick={clearSelectedFile}>
+                                Clear
+                              </Button>
+                            </>
+                          )}
+                        </div>
+                        <p className="text-xs text-muted-foreground">Accepted formats: .xlsx, .xls, .csv</p>
+                      </div>
+                      <div className="flex justify-end pt-2">
+                        <Button type="submit" disabled={!uploadFile || uploading} className="cursor-pointer">
+                          {uploading ? "Uploading…" : "Import Results"}
+                        </Button>
+                      </div>
+                    </form>
+                  </TabsContent>
+                </Tabs>
+              </>
+            )}
           </div>
           <DialogFooter>
             <Button variant="secondary" onClick={() => setResultsOpen(false)} className="cursor-pointer">Close</Button>
-            <Button onClick={handleBulkSave} disabled={classStudentsForExam.length === 0} className="cursor-pointer">Save Results</Button>
+            {canUploadExamResults && resultsTab === "manual" && (
+              <Button onClick={handleBulkSave} disabled={examResultsForSelected.length === 0} className="cursor-pointer">Save Changes</Button>
+            )}
+            {canUploadExamResults && resultsTab === "single" && (
+              <Button onClick={handleSingleSave} disabled={!singleForm.studentId || !singleForm.score || studentsWithoutResults.length === 0} className="cursor-pointer">Save Result</Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -532,7 +894,7 @@ function OnlineClassesTab({ onlineClasses, classes, subjects, staff }: Pick<Page
                       {oc.status === "scheduled" && (
                         <Button size="sm" variant="secondary" onClick={() => router.put(`/dashboard/academics/online-classes/${oc.id}`, { status: "live" }, { preserveScroll: true })} className="cursor-pointer">Go Live</Button>
                       )}
-                      <button onClick={() => void routerDeleteWithConfirm(`/dashboard/academics/online-classes/${oc.id}`, { title: "Delete this online class?" })} className="p-1.5 rounded hover:bg-red-50 hover:text-red-600 cursor-pointer"><Trash2 className="h-3.5 w-3.5" /></button>
+                      <button title="routeDeleteWith Concern" onClick={() => void routerDeleteWithConfirm(`/dashboard/academics/online-classes/${oc.id}`, { title: "Delete this online class?" })} className="p-1.5 rounded hover:bg-red-50 hover:text-red-600 cursor-pointer"><Trash2 className="h-3.5 w-3.5" /></button>
                     </div>
                   </div>
                 </CardContent>
@@ -677,7 +1039,7 @@ function AcademicsContent(props: PageProps) {
         </TabsList>
         <TabsContent value="subjects" className="mt-4"><SubjectsTab subjects={props.subjects} staff={props.staff} /></TabsContent>
         <TabsContent value="assignments" className="mt-4"><AssignmentsTab assignments={props.assignments} classes={props.classes} subjects={props.subjects} staff={props.staff} submissions={props.submissions} /></TabsContent>
-        <TabsContent value="exams" className="mt-4"><ExamsTab exams={props.exams} classes={props.classes} subjects={props.subjects} students={props.students} examResults={props.examResults} /></TabsContent>
+        <TabsContent value="exams" className="mt-4"><ExamsTab exams={props.exams} classes={props.classes} subjects={props.subjects} students={props.students} examResults={props.examResults} canUploadExamResults={props.canUploadExamResults} /></TabsContent>
         <TabsContent value="online" className="mt-4"><OnlineClassesTab onlineClasses={props.onlineClasses} classes={props.classes} subjects={props.subjects} staff={props.staff} /></TabsContent>
         <TabsContent value="analytics" className="mt-4"><AnalyticsTab exams={props.exams} subjects={props.subjects} classes={props.classes} /></TabsContent>
       </Tabs>

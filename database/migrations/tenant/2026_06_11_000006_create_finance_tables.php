@@ -10,7 +10,7 @@ return new class extends Migration
     {
         Schema::create('library_books', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('school_id')->constrained('schools')->cascadeOnDelete();
+            $table->unsignedBigInteger('school_id')->index();
             $table->string('title');
             $table->string('author');
             $table->string('isbn')->nullable();
@@ -28,7 +28,7 @@ return new class extends Migration
 
         Schema::create('library_issuances', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('school_id')->constrained('schools')->cascadeOnDelete();
+            $table->unsignedBigInteger('school_id')->index();
             $table->foreignId('book_id')->constrained('library_books')->cascadeOnDelete();
             $table->string('borrower_id');
             $table->string('borrower_type');
@@ -43,7 +43,7 @@ return new class extends Migration
 
         Schema::create('fee_structures', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('school_id')->constrained('schools')->cascadeOnDelete();
+            $table->unsignedBigInteger('school_id')->index();
             $table->string('name');
             $table->string('grade_level')->nullable();
             $table->string('academic_year');
@@ -57,7 +57,7 @@ return new class extends Migration
 
         Schema::create('fee_payments', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('school_id')->constrained('schools')->cascadeOnDelete();
+            $table->unsignedBigInteger('school_id')->index();
             $table->foreignId('student_id')->constrained('students')->cascadeOnDelete();
             $table->foreignId('fee_structure_id')->nullable()->constrained('fee_structures')->nullOnDelete();
             $table->string('receipt_number');
@@ -68,7 +68,7 @@ return new class extends Migration
             $table->string('academic_year');
             $table->string('term')->nullable();
             $table->string('status')->default('paid');
-            $table->foreignId('recorded_by')->nullable()->constrained('users')->nullOnDelete();
+            $table->unsignedBigInteger('recorded_by')->nullable()->index();
             $table->text('notes')->nullable();
             $table->timestamps();
             $table->softDeletes();
@@ -78,7 +78,7 @@ return new class extends Migration
 
         Schema::create('expenses', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('school_id')->constrained('schools')->cascadeOnDelete();
+            $table->unsignedBigInteger('school_id')->index();
             $table->string('category');
             $table->text('description');
             $table->decimal('amount', 12, 2);
@@ -87,7 +87,7 @@ return new class extends Migration
             $table->string('receipt_url')->nullable();
             $table->string('payment_method')->default('cash');
             $table->string('reference_number')->nullable();
-            $table->foreignId('approved_by')->nullable()->constrained('users')->nullOnDelete();
+            $table->unsignedBigInteger('approved_by')->nullable()->index();
             $table->string('status')->default('pending');
             $table->timestamps();
             $table->softDeletes();
@@ -97,7 +97,7 @@ return new class extends Migration
 
         Schema::create('chart_of_accounts', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('school_id')->constrained('schools')->cascadeOnDelete();
+            $table->unsignedBigInteger('school_id')->index();
             $table->string('code');
             $table->string('name');
             $table->string('account_type');
@@ -113,14 +113,14 @@ return new class extends Migration
 
         Schema::create('journal_entries', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('school_id')->constrained('schools')->cascadeOnDelete();
+            $table->unsignedBigInteger('school_id')->index();
             $table->string('entry_number');
             $table->string('entry_date');
             $table->text('description');
             $table->string('reference_type')->nullable();
             $table->unsignedBigInteger('reference_id')->nullable();
             $table->string('status')->default('posted');
-            $table->foreignId('created_by')->nullable()->constrained('users')->nullOnDelete();
+            $table->unsignedBigInteger('created_by')->nullable()->index();
             $table->timestamps();
             $table->softDeletes();
 
@@ -139,9 +139,9 @@ return new class extends Migration
 
         Schema::create('petty_cash_funds', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('school_id')->constrained('schools')->cascadeOnDelete();
+            $table->unsignedBigInteger('school_id')->index();
             $table->string('name');
-            $table->foreignId('custodian_id')->nullable()->constrained('users')->nullOnDelete();
+            $table->unsignedBigInteger('custodian_id')->nullable()->index();
             $table->decimal('float_amount', 12, 2);
             $table->decimal('current_balance', 12, 2);
             $table->timestamps();
@@ -150,7 +150,7 @@ return new class extends Migration
 
         Schema::create('petty_cash_transactions', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('school_id')->constrained('schools')->cascadeOnDelete();
+            $table->unsignedBigInteger('school_id')->index();
             $table->foreignId('petty_cash_fund_id')->constrained('petty_cash_funds')->cascadeOnDelete();
             $table->foreignId('expense_id')->nullable()->constrained('expenses')->nullOnDelete();
             $table->string('transaction_date');
@@ -158,7 +158,7 @@ return new class extends Migration
             $table->text('description');
             $table->decimal('amount', 12, 2);
             $table->string('transaction_type');
-            $table->foreignId('recorded_by')->nullable()->constrained('users')->nullOnDelete();
+            $table->unsignedBigInteger('recorded_by')->nullable()->index();
             $table->timestamps();
             $table->softDeletes();
 
@@ -167,7 +167,7 @@ return new class extends Migration
 
         Schema::create('payroll_records', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('school_id')->constrained('schools')->cascadeOnDelete();
+            $table->unsignedBigInteger('school_id')->index();
             $table->foreignId('staff_id')->constrained('staff')->cascadeOnDelete();
             $table->unsignedTinyInteger('month');
             $table->unsignedSmallInteger('year');
@@ -186,14 +186,14 @@ return new class extends Migration
 
         Schema::create('leave_requests', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('school_id')->constrained('schools')->cascadeOnDelete();
+            $table->unsignedBigInteger('school_id')->index();
             $table->foreignId('staff_id')->constrained('staff')->cascadeOnDelete();
             $table->string('type');
             $table->string('start_date');
             $table->string('end_date');
             $table->text('reason');
             $table->string('status')->default('pending')->index();
-            $table->foreignId('approved_by')->nullable()->constrained('users')->nullOnDelete();
+            $table->unsignedBigInteger('approved_by')->nullable()->index();
             $table->timestamps();
             $table->softDeletes();
         });

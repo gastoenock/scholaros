@@ -1,4 +1,4 @@
-import { router } from "@inertiajs/react";
+import { router, usePage } from "@inertiajs/react";
 import { DashboardLayout } from "./_components/layout.tsx";
 import { useCurrentSchool } from "./_components/use-current-school.ts";
 import { Button } from "@/components/ui/button.tsx";
@@ -10,7 +10,7 @@ import {
 } from "lucide-react";
 import { motion } from "motion/react";
 import { format } from "date-fns";
-import type { AuthUser, School } from "@/lib/types.ts";
+import type { AuthUser, School, SharedPageProps } from "@/lib/types.ts";
 
 type DashboardStats = {
   totalStudents: number;
@@ -232,8 +232,8 @@ function SuperAdminDashboard({ schools, applications }: { schools: School[]; app
   return (
     <div className="space-y-8">
       <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}>
-        <h1 className="text-2xl font-extrabold">Super Admin Dashboard</h1>
-        <p className="text-muted-foreground">Platform-wide overview and management</p>
+        <h1 className="text-2xl font-extrabold">Platform Dashboard</h1>
+        <p className="text-muted-foreground">Manage schools, applications, and enter a school to operate its modules</p>
       </motion.div>
 
       <motion.div
@@ -278,9 +278,12 @@ function SuperAdminDashboard({ schools, applications }: { schools: School[]; app
 }
 
 function DashboardInner({ school, stats, recentAdmissions, schools, applications }: PageProps) {
-  const { user, schoolId, role } = useCurrentSchool();
+  const { user, schoolId } = useCurrentSchool();
+  const { platform, tenancyHost } = usePage<SharedPageProps>().props;
+  const isPlatformAdmin = platform?.isPlatformAdmin ?? false;
+  const managingTenant = isPlatformAdmin && (!!platform?.manageTenantId || tenancyHost?.isTenant);
 
-  if (role === "superadmin") {
+  if (isPlatformAdmin && !managingTenant) {
     return <SuperAdminDashboard schools={schools} applications={applications} />;
   }
 

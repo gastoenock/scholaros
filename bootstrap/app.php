@@ -13,7 +13,27 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->web(append: [
+            \App\Http\Middleware\ResolveAuthGuard::class,
             \App\Http\Middleware\HandleInertiaRequests::class,
+        ]);
+
+        $middleware->alias([
+            'tenant' => \App\Http\Middleware\EnsureTenancy::class,
+            'central' => \App\Http\Middleware\EnsureCentralDomain::class,
+        ]);
+
+        // Initialize tenancy before route model binding resolves tenant models.
+        $middleware->priority([
+            \Illuminate\Foundation\Http\Middleware\HandlePrecognitiveRequests::class,
+            \Illuminate\Cookie\Middleware\EncryptCookies::class,
+            \Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse::class,
+            \Illuminate\Session\Middleware\StartSession::class,
+            \Illuminate\View\Middleware\ShareErrorsFromSession::class,
+            \Stancl\Tenancy\Middleware\InitializeTenancyBySubdomain::class,
+            \Illuminate\Foundation\Http\Middleware\ValidateCsrfToken::class,
+            \Illuminate\Routing\Middleware\SubstituteBindings::class,
+            \Illuminate\Auth\Middleware\Authenticate::class,
+            \App\Http\Middleware\EnsureTenancy::class,
         ]);
 
         $middleware->redirectGuestsTo('/login');

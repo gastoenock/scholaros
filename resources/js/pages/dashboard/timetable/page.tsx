@@ -223,10 +223,10 @@ function TimetableInner({ classes, staff, slots }: PageProps) {
                                     {slot.startTime}–{slot.endTime}
                                   </div>
                                   <div className="absolute top-1 right-1 hidden group-hover:flex gap-1">
-                                    <button onClick={() => openEdit(slot)} className="p-1 rounded bg-background/80 hover:bg-background cursor-pointer">
+                                    <button title="openEdit" onClick={() => openEdit(slot)} className="p-1 rounded bg-background/80 hover:bg-background cursor-pointer">
                                       <Pencil className="h-3 w-3" />
                                     </button>
-                                    <button onClick={() => handleDelete(slot.id)} className="p-1 rounded bg-background/80 hover:bg-red-50 hover:text-red-600 cursor-pointer">
+                                    <button title="handleDelete" onClick={() => handleDelete(slot.id)} className="p-1 rounded bg-background/80 hover:bg-red-50 hover:text-red-600 cursor-pointer">
                                       <Trash2 className="h-3 w-3" />
                                     </button>
                                   </div>

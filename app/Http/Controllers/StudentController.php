@@ -17,11 +17,9 @@ class StudentController extends Controller
 {
     public function index(): Response
     {
-        $schoolId = $this->schoolId();
+        $schoolId = $this->requireTenancy();
 
-        $students = $schoolId
-            ? Student::forSchool($schoolId)->with('branch')->orderBy('last_name')->get()
-            : collect();
+        $students = Student::forSchool($schoolId)->with('branch')->orderBy('last_name')->get();
 
         $stats = [
             'total' => $students->count(),
@@ -29,13 +27,11 @@ class StudentController extends Controller
             'byGrade' => $students->countBy(fn ($s) => $s->grade_level ?? 'Unassigned'),
         ];
 
-        $school = $this->school();
-
         return Inertia::render('dashboard/students/page', [
             'students' => $students,
             'stats' => $stats,
-            'school' => $school,
-            'branches' => $school?->branches ?? [],
+            'school' => $this->school(),
+            'branches' => SchoolBranch::forSchool($schoolId)->orderBy('name')->get(),
         ]);
     }
 

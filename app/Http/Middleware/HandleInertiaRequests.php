@@ -2,30 +2,18 @@
 
 namespace App\Http\Middleware;
 
+use App\Models\School;
+use App\Support\TenancyUrl;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
 use Inertia\Support\Header;
 
 class HandleInertiaRequests extends Middleware
 {
-    /**
-     * The root template that's loaded on the first page visit.
-     *
-     * @see https://inertiajs.com/server-side-setup#root-template
-     *
-     * @var string
-     */
     protected $rootView = 'app';
 
-    /**
-     * Determines the current asset version.
-     *
-     * @see https://inertiajs.com/asset-versioning
-     */
     public function version(Request $request): ?string
     {
-        // While Vite dev server is running, mirror the client asset version so
-        // first navigations don't get 409 location redirects back to dashboard.
         if (file_exists(public_path('hot'))) {
             return $request->header(Header::VERSION, '');
         }
@@ -33,16 +21,19 @@ class HandleInertiaRequests extends Middleware
         return parent::version($request);
     }
 
-    /**
-     * Define the props that are shared by default.
-     *
-     * @see https://inertiajs.com/shared-data
-     *
-     * @return array<string, mixed>
-     */
     public function share(Request $request): array
     {
         $user = $request->user();
+        $isCentral = TenancyUrl::isCentralHost($request->getHost());
+        $tenantSlug = TenancyUrl::tenantSlugFromHost($request->getHost());
+        $managedTenantId = $user?->isPlatformAdmin()
+            ? $request->session()->get('manage_tenant_id')
+            : null;
+        $managedTenant = $managedTenantId ? School::find($managedTenantId) : null;
+        $tenantId = tenancy()->initialized
+            ? (int) tenant('id')
+            : ($managedTenantId ? (int) $managedTenantId : null);
+        $managingTenant = $user?->isPlatformAdmin() && ($isCentral ? (bool) $managedTenantId : tenancy()->initialized);
 
         return [
             ...parent::share($request),
@@ -52,10 +43,29 @@ class HandleInertiaRequests extends Middleware
                     'name' => $user->name,
                     'email' => $user->email,
                     'role' => $user->role,
-                    'schoolId' => $user->school_id,
-                    'avatar' => $user->avatar,
-                    'phone' => $user->phone,
+                    'accountType' => $user->isPlatformAdmin() ? 'platform' : 'tenant',
+                    'schoolId' => $tenantId,
+                    'avatar' => $user->avatar ?? null,
+                    'phone' => $user->phone ?? null,
                 ] : null,
+            ],
+            'platform' => [
+                'isPlatformAdmin' => $user?->isPlatformAdmin() ?? false,
+                'manageTenantId' => $managingTenant ? $tenantId : null,
+                'manageTenantName' => $managingTenant
+                    ? (tenancy()->initialized && tenant() instanceof School ? tenant()->name : $managedTenant?->name)
+                    : null,
+                'tenants' => $user?->isPlatformAdmin()
+                    ? School::query()->orderBy('name')->get(['id', 'name', 'slug', 'is_active', 'plan'])
+                    : [],
+            ],
+            'tenancyHost' => [
+                'isCentral' => $isCentral,
+                'isTenant' => ! $isCentral && $tenantSlug !== null,
+                'centralDomain' => TenancyUrl::centralDomain(),
+                'centralUrl' => TenancyUrl::centralUrl('/'),
+                'tenantSlug' => $tenantSlug,
+                'tenantName' => tenancy()->initialized && tenant() instanceof School ? tenant()->name : null,
             ],
             'flash' => [
                 'success' => $request->session()->get('success'),

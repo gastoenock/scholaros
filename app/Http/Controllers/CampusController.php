@@ -12,8 +12,18 @@ class CampusController extends Controller
 {
     public function index(): Response
     {
+        $schoolId = $this->requireTenancy();
+        $school = $this->school();
+
+        if ($school) {
+            $school->setRelation(
+                'branches',
+                SchoolBranch::forSchool($schoolId)->orderBy('name')->get(),
+            );
+        }
+
         return Inertia::render('dashboard/campus/page', [
-            'school' => $this->school(),
+            'school' => $school,
         ]);
     }
 
@@ -41,8 +51,7 @@ class CampusController extends Controller
 
     public function storeBranch(Request $request): RedirectResponse
     {
-        $school = $this->school();
-        abort_unless($school, 403);
+        $schoolId = $this->requireTenancy();
 
         $validated = $request->validate([
             'code' => ['nullable', 'string', 'max:50'],
@@ -52,7 +61,10 @@ class CampusController extends Controller
             'principalName' => ['nullable', 'string', 'max:255'],
         ]);
 
-        $school->branches()->create($this->snakeKeys($validated));
+        SchoolBranch::create([
+            ...$this->snakeKeys($validated),
+            'school_id' => $schoolId,
+        ]);
 
         return back()->with('success', 'Branch added!');
     }

@@ -10,8 +10,8 @@ return new class extends Migration
     {
         Schema::create('meetings', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('school_id')->constrained('schools')->cascadeOnDelete();
-            $table->foreignId('parent_id')->nullable()->constrained('users')->nullOnDelete();
+            $table->unsignedBigInteger('school_id')->index();
+            $table->unsignedBigInteger('parent_id')->nullable()->index();
             $table->string('title');
             $table->text('description')->nullable();
             $table->string('scheduled_at');
@@ -48,7 +48,7 @@ return new class extends Migration
 
         Schema::create('events', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('school_id')->constrained('schools')->cascadeOnDelete();
+            $table->unsignedBigInteger('school_id')->index();
             $table->foreignId('school_branch_id')->nullable()->constrained('school_branches')->nullOnDelete();
             $table->string('title');
             $table->text('description')->nullable();
@@ -57,7 +57,7 @@ return new class extends Migration
             $table->string('location')->nullable();
             $table->string('event_type')->default('general');
             $table->string('status')->default('scheduled');
-            $table->foreignId('created_by')->nullable()->constrained('users')->nullOnDelete();
+            $table->unsignedBigInteger('created_by')->nullable()->index();
             $table->timestamps();
             $table->softDeletes();
 
@@ -66,7 +66,7 @@ return new class extends Migration
 
         Schema::create('assets', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('school_id')->constrained('schools')->cascadeOnDelete();
+            $table->unsignedBigInteger('school_id')->index();
             $table->string('name');
             $table->string('category');
             $table->string('asset_tag');
@@ -89,8 +89,8 @@ return new class extends Migration
 
         Schema::create('parent_student_links', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('school_id')->constrained('schools')->cascadeOnDelete();
-            $table->foreignId('parent_user_id')->constrained('users')->cascadeOnDelete();
+            $table->unsignedBigInteger('school_id')->index();
+            $table->unsignedBigInteger('parent_user_id')->index();
             $table->foreignId('student_id')->constrained('students')->cascadeOnDelete();
             $table->string('relationship');
             $table->boolean('is_primary')->default(false);
@@ -100,8 +100,8 @@ return new class extends Migration
 
         Schema::create('call_sessions', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('school_id')->constrained('schools')->cascadeOnDelete();
-            $table->foreignId('initiator_id')->constrained('users')->cascadeOnDelete();
+            $table->unsignedBigInteger('school_id')->index();
+            $table->unsignedBigInteger('initiator_id')->index();
             $table->string('call_type');
             $table->string('room_code')->unique();
             $table->string('title')->nullable();
@@ -117,7 +117,7 @@ return new class extends Migration
         Schema::create('call_participants', function (Blueprint $table) {
             $table->id();
             $table->foreignId('call_session_id')->constrained('call_sessions')->cascadeOnDelete();
-            $table->foreignId('user_id')->constrained('users')->cascadeOnDelete();
+            $table->unsignedBigInteger('user_id')->index();
             $table->string('status')->default('invited');
             $table->string('joined_at')->nullable();
             $table->string('left_at')->nullable();

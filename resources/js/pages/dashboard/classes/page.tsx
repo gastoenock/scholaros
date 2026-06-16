@@ -151,10 +151,10 @@ function ClassesContent({ classes, staff, students }: PageProps) {
                         <p className="text-sm text-muted-foreground">Grade {c.gradeLevel}{c.section ? ` · Section ${c.section}` : ""}</p>
                       </div>
                       <div className="flex gap-1.5">
-                        <button onClick={() => openEdit(c)} className="p-1.5 rounded hover:bg-muted cursor-pointer">
+                        <button title="openEdit" onClick={() => openEdit(c)} className="p-1.5 rounded hover:bg-muted cursor-pointer">
                           <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
                         </button>
-                        <button onClick={() => handleDelete(c.id)} className="p-1.5 rounded hover:bg-red-50 hover:text-red-600 cursor-pointer">
+                        <button title="handleDelete" onClick={() => handleDelete(c.id)} className="p-1.5 rounded hover:bg-red-50 hover:text-red-600 cursor-pointer">
                           <Trash2 className="h-3.5 w-3.5" />
                         </button>
                       </div>

@@ -10,7 +10,7 @@ return new class extends Migration
     {
         Schema::create('assignments', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('school_id')->constrained('schools')->cascadeOnDelete();
+            $table->unsignedBigInteger('school_id')->index();
             $table->foreignId('class_id')->constrained('classes')->cascadeOnDelete();
             $table->foreignId('subject_id')->constrained('subjects')->cascadeOnDelete();
             $table->foreignId('teacher_id')->constrained('staff')->cascadeOnDelete();
@@ -28,7 +28,7 @@ return new class extends Migration
             $table->id();
             $table->foreignId('assignment_id')->constrained('assignments')->cascadeOnDelete();
             $table->foreignId('student_id')->constrained('students')->cascadeOnDelete();
-            $table->foreignId('school_id')->constrained('schools')->cascadeOnDelete();
+            $table->unsignedBigInteger('school_id')->index();
             $table->string('submitted_at')->nullable();
             $table->double('score')->nullable();
             $table->text('feedback')->nullable();
@@ -39,7 +39,7 @@ return new class extends Migration
 
         Schema::create('exams', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('school_id')->constrained('schools')->cascadeOnDelete();
+            $table->unsignedBigInteger('school_id')->index();
             $table->foreignId('class_id')->constrained('classes')->cascadeOnDelete();
             $table->foreignId('subject_id')->constrained('subjects')->cascadeOnDelete();
             $table->string('title');
@@ -59,7 +59,7 @@ return new class extends Migration
             $table->id();
             $table->foreignId('exam_id')->constrained('exams')->cascadeOnDelete();
             $table->foreignId('student_id')->constrained('students')->cascadeOnDelete();
-            $table->foreignId('school_id')->constrained('schools')->cascadeOnDelete();
+            $table->unsignedBigInteger('school_id')->index();
             $table->double('score');
             $table->string('grade')->nullable();
             $table->text('remarks')->nullable();
@@ -69,7 +69,7 @@ return new class extends Migration
 
         Schema::create('online_classes', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('school_id')->constrained('schools')->cascadeOnDelete();
+            $table->unsignedBigInteger('school_id')->index();
             $table->foreignId('class_id')->constrained('classes')->cascadeOnDelete();
             $table->foreignId('subject_id')->nullable()->constrained('subjects')->nullOnDelete();
             $table->foreignId('teacher_id')->constrained('staff')->cascadeOnDelete();

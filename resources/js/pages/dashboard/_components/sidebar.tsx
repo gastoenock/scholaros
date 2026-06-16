@@ -45,8 +45,8 @@ type NavItem = {
 
 const navItems: NavItem[] = [
   { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
-  { label: "Schools", href: "/dashboard/schools", icon: School, roles: ["superadmin"] },
-  { label: "Admin Panel", href: "/dashboard/admin", icon: Settings, roles: ["superadmin"] },
+  { label: "Schools", href: "/dashboard/schools", icon: School, roles: ["superadmin", "landlord"] },
+  { label: "Admin Panel", href: "/dashboard/admin", icon: Settings, roles: ["superadmin", "landlord"] },
   { label: "Parent Portal", href: "/dashboard/parent-portal", icon: UserCheck, roles: ["parent"] },
   { label: "Students", href: "/dashboard/students", icon: Users, roles: ["admin", "teacher", "superadmin"] },
   { label: "Staff", href: "/dashboard/staff", icon: Users, roles: ["admin", "superadmin"] },
@@ -69,25 +69,61 @@ const navItems: NavItem[] = [
   { label: "Buildings", href: "/dashboard/campus", icon: Building2, roles: ["admin", "superadmin"] },
 ];
 
+const platformOnlyLabels = new Set(["Dashboard", "Schools", "Admin Panel"]);
+
+function canAccessNavItem(item: NavItem, role: string): boolean {
+  if (!item.roles) {
+    return true;
+  }
+
+  if (item.roles.includes(role)) {
+    return true;
+  }
+
+  if ((role === "superadmin" || role === "landlord") && item.roles.includes("superadmin")) {
+    return true;
+  }
+
+  return false;
+}
+
 function SidebarContent({
   role,
   user,
+  isPlatformAdmin,
+  manageTenantId,
+  manageTenantName,
+  isTenantHost,
   onClose,
 }: {
   role?: string;
   user: { name?: string; email?: string } | null;
+  isPlatformAdmin: boolean;
+  manageTenantId: number | null;
+  manageTenantName: string | null;
+  isTenantHost: boolean;
   onClose?: () => void;
 }) {
   const { signout } = useAuth();
   const { url } = usePage();
   const currentPath = url.split("?")[0];
+  const managingTenant = isPlatformAdmin && (!!manageTenantId || isTenantHost);
 
-  const visibleItems = navItems.filter(
-    (item) => !item.roles || !role || item.roles.includes(role)
-  );
+  const visibleItems = navItems.filter((item) => {
+    if (isPlatformAdmin && !managingTenant) {
+      return platformOnlyLabels.has(item.label);
+    }
+
+    return !role || canAccessNavItem(item, role);
+  });
 
   const handleSignOut = () => {
     void signout();
+  };
+
+  const handleLeaveTenant = () => {
+    router.post("/dashboard/landlord/tenants/leave", {}, { preserveScroll: true });
+    onClose?.();
   };
 
   return (
@@ -104,7 +140,7 @@ function SidebarContent({
           <span className="text-base font-extrabold">ScholarOS</span>
         </div>
         {onClose && (
-          <button onClick={onClose} className="cursor-pointer text-sidebar-foreground/60 hover:text-sidebar-foreground">
+          <button title="onClose" onClick={onClose} className="cursor-pointer text-sidebar-foreground/60 hover:text-sidebar-foreground">
             <X className="h-5 w-5" />
           </button>
         )}
@@ -112,10 +148,23 @@ function SidebarContent({
 
       {/* Role badge */}
       {role && (
-        <div className="px-4 py-3 border-b border-sidebar-border">
+        <div className="px-4 py-3 border-b border-sidebar-border space-y-2">
           <Badge className="bg-sidebar-primary/20 text-sidebar-primary border-sidebar-primary/30 capitalize text-xs">
             {role}
           </Badge>
+          {managingTenant && manageTenantName && (
+            <div className="rounded-lg bg-sidebar-accent/40 px-3 py-2">
+              <p className="text-[10px] uppercase tracking-wide text-sidebar-foreground/50">Managing</p>
+              <p className="text-xs font-semibold truncate">{manageTenantName}</p>
+              <button
+                type="button"
+                onClick={handleLeaveTenant}
+                className="mt-2 text-[11px] font-medium text-sidebar-primary hover:underline cursor-pointer"
+              >
+                Exit school
+              </button>
+            </div>
+          )}
         </div>
       )}
 
@@ -181,19 +230,27 @@ function SidebarContent({
 
 export function DashboardSidebar() {
   const [mobileOpen, setMobileOpen] = useState(false);
-  const { auth } = usePage<SharedPageProps>().props;
+  const { auth, platform, tenancyHost } = usePage<SharedPageProps>().props;
   const currentUser = auth.user;
+  const sidebarProps = {
+    role: currentUser?.role ?? undefined,
+    user: currentUser,
+    isPlatformAdmin: platform?.isPlatformAdmin ?? false,
+    manageTenantId: platform?.manageTenantId ?? null,
+    manageTenantName: platform?.manageTenantName ?? null,
+    isTenantHost: tenancyHost?.isTenant ?? false,
+  };
 
   return (
     <>
       {/* Desktop sidebar */}
       <aside className="hidden md:flex md:w-64 md:flex-col md:fixed md:inset-y-0 border-r border-sidebar-border z-30">
-        <SidebarContent role={currentUser?.role ?? undefined} user={currentUser} />
+        <SidebarContent {...sidebarProps} />
       </aside>
 
       {/* Mobile header */}
       <div className="md:hidden fixed top-0 left-0 right-0 z-40 bg-sidebar border-b border-sidebar-border h-14 flex items-center px-4 gap-3">
-        <button onClick={() => setMobileOpen(true)} className="cursor-pointer text-sidebar-foreground">
+        <button title="setMobileOpen" onClick={() => setMobileOpen(true)} className="cursor-pointer text-sidebar-foreground">
           <Menu className="h-5 w-5" />
         </button>
         <div className="flex items-center gap-2">
@@ -213,8 +270,7 @@ export function DashboardSidebar() {
           />
           <div className="relative w-72 flex-shrink-0">
             <SidebarContent
-              role={currentUser?.role ?? undefined}
-              user={currentUser}
+              {...sidebarProps}
               onClose={() => setMobileOpen(false)}
             />
           </div>

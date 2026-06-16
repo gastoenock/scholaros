@@ -33,6 +33,8 @@ export type SchoolRecord = {
   isActive: boolean;
   plan: string;
   createdAt: string;
+  tenantUrl?: string;
+  loginUrl?: string;
 };
 
 const createSchoolSchema = z.object({
@@ -49,6 +51,14 @@ const createSchoolSchema = z.object({
 type CreateSchoolData = z.infer<typeof createSchoolSchema>;
 
 function SchoolCard({ school }: { school: SchoolRecord }) {
+  const handleManage = () => {
+    router.post(`/dashboard/landlord/tenants/${school.id}/enter`, {}, {
+      preserveScroll: true,
+      onSuccess: () => toast.success(`Now managing ${school.name}`),
+      onError: () => toast.error("Could not enter school"),
+    });
+  };
+
   return (
     <Card className="hover:shadow-md transition-shadow">
       <CardContent className="p-5">
@@ -62,7 +72,13 @@ function SchoolCard({ school }: { school: SchoolRecord }) {
               <p className="text-xs text-muted-foreground">/{school.slug}</p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap justify-end">
+            <Button size="sm" variant="secondary" asChild className="cursor-pointer">
+              <a href={school.loginUrl}>Open</a>
+            </Button>
+            <Button size="sm" onClick={handleManage} className="cursor-pointer">
+              Manage
+            </Button>
             <Badge className={school.isActive ? "bg-green-100 text-green-700 border-green-200 border" : "bg-gray-100 text-gray-600 border-gray-200 border"}>
               {school.isActive ? <CheckCircle className="h-3 w-3 mr-1" /> : <XCircle className="h-3 w-3 mr-1" />}
               {school.isActive ? "Active" : "Inactive"}
@@ -158,17 +174,18 @@ function CreateSchoolDialog({ open, onClose }: { open: boolean; onClose: () => v
 }
 
 function SchoolsContent({ schools }: { schools: SchoolRecord[] }) {
-  const { auth } = usePage<SharedPageProps>().props;
+  const { auth, platform } = usePage<SharedPageProps>().props;
   const [search, setSearch] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
+  const isPlatformAdmin = platform?.isPlatformAdmin ?? false;
 
-  if (auth.user?.role !== "superadmin") {
+  if (!isPlatformAdmin) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
         <div className="text-center space-y-3">
           <XCircle className="h-10 w-10 text-destructive mx-auto" />
           <h2 className="text-xl font-bold">Access Denied</h2>
-          <p className="text-muted-foreground">Only superadmins can manage schools.</p>
+          <p className="text-muted-foreground">Only platform administrators can manage schools.</p>
         </div>
       </div>
     );

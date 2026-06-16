@@ -10,9 +10,9 @@ return new class extends Migration
     {
         Schema::create('staff', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('school_id')->constrained('schools')->cascadeOnDelete();
+            $table->unsignedBigInteger('school_id')->index();
             $table->foreignId('school_branch_id')->nullable()->constrained('school_branches')->nullOnDelete();
-            $table->foreignId('user_id')->nullable()->constrained('users')->nullOnDelete();
+            $table->unsignedBigInteger('user_id')->nullable()->index();
             $table->string('first_name');
             $table->string('last_name');
             $table->string('date_of_birth')->nullable();
@@ -38,7 +38,8 @@ return new class extends Migration
 
         Schema::create('students', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('school_id')->constrained('schools')->cascadeOnDelete();
+            $table->uuid('uuid')->unique();
+            $table->unsignedBigInteger('school_id')->index();
             $table->foreignId('school_branch_id')->nullable()->constrained('school_branches')->nullOnDelete();
             $table->string('first_name');
             $table->string('last_name');
@@ -70,7 +71,7 @@ return new class extends Migration
 
         Schema::create('classes', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('school_id')->constrained('schools')->cascadeOnDelete();
+            $table->unsignedBigInteger('school_id')->index();
             $table->foreignId('school_branch_id')->nullable()->constrained('school_branches')->nullOnDelete();
             $table->string('name');
             $table->string('grade_level');
@@ -87,7 +88,7 @@ return new class extends Migration
 
         Schema::create('subjects', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('school_id')->constrained('schools')->cascadeOnDelete();
+            $table->unsignedBigInteger('school_id')->index();
             $table->string('name');
             $table->string('code')->nullable();
             $table->string('grade_level')->nullable();

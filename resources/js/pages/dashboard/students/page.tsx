@@ -42,6 +42,7 @@ type Guardian = {
 
 export type Student = {
   id: number;
+  uuid: string;
   schoolId: number;
   schoolBranchId?: number | null;
   firstName: string;
@@ -516,7 +517,7 @@ function StudentsContent({ students, stats, school, branches }: PageProps) {
                     <td className="px-4 py-3">
                       <div className="flex items-center justify-end gap-1">
                         <Button variant="ghost" size="sm" className="h-7 w-7 p-0 cursor-pointer" asChild>
-                          <Link href={`/dashboard/students/${student.id}`}>
+                          <Link href={`/dashboard/students/${student.uuid}`}>
                             <Eye className="h-3.5 w-3.5" />
                           </Link>
                         </Button>

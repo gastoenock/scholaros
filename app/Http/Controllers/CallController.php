@@ -9,19 +9,20 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
+use App\Models\User;
 
 class CallController extends Controller
 {
     public function store(Request $request): RedirectResponse
     {
         $user = Auth::user();
-        $schoolId = $this->schoolId();
-        abort_unless($schoolId, 403);
+        $schoolId = $this->requireTenancy();
 
         $validated = $request->validate([
             'callType' => ['required', 'in:audio,video,conference'],
             'participantIds' => ['required', 'array', 'min:1'],
-            'participantIds.*' => ['integer', 'exists:users,id'],
+            'participantIds.*' => ['integer', Rule::exists(User::class, 'id')],
             'title' => ['nullable', 'string', 'max:255'],
         ]);
 

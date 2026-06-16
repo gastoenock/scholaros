@@ -11,7 +11,12 @@ import {
   CardTitle,
 } from "@/components/ui/card.tsx";
 
-export default function SignupPage() {
+type PageProps = {
+  school: { name: string; slug: string } | null;
+  loginUrl: string;
+};
+
+export default function SignupPage({ school, loginUrl }: PageProps) {
   const { data, setData, post, processing, errors } = useForm({
     name: "",
     email: "",
@@ -26,7 +31,7 @@ export default function SignupPage() {
 
   return (
     <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4">
-      <Head title="Create Account" />
+      <Head title={school ? `Join ${school.name}` : "Create Account"} />
       <Link href="/" className="flex items-center gap-2 mb-8">
         <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center">
           <GraduationCap className="h-6 w-6 text-primary-foreground" />
@@ -38,7 +43,9 @@ export default function SignupPage() {
         <CardHeader>
           <CardTitle>Create your account</CardTitle>
           <CardDescription>
-            Get started with ScholarOS. A school admin can link your account to a school.
+            {school
+              ? `Register as a parent at ${school.name}.`
+              : "Join your school on ScholarOS."}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -105,7 +112,7 @@ export default function SignupPage() {
           <div className="mt-6 text-center text-sm text-muted-foreground">
             <p>
               Already have an account?{" "}
-              <Link href="/login" className="text-primary font-medium hover:underline">
+              <Link href={loginUrl} className="text-primary font-medium hover:underline">
                 Sign in
               </Link>
             </p>

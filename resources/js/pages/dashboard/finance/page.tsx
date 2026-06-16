@@ -810,7 +810,6 @@ function FinanceContent({ academicYear, reportAsOf, summary, payments, expenses,
               <p className="text-xs text-muted-foreground">
                 Double-entry postings are generated automatically from approved expenses and paid fee receipts.
                 Chart of accounts follows IFRS taxonomy (IFRS 15 revenue, IAS 1 presentation, IAS 7 cash flows).
-                Note: IFRS 17 applies to insurance contracts and is not applicable to standard school operations.
               </p>
             </>
           )}

@@ -27,19 +27,37 @@ php artisan key:generate
 # 3. Migrate and seed demo data (ABAMA International Schools)
 php artisan migrate:fresh --seed
 
-# 4. Run dev servers (two terminals)
-php artisan serve
+# 4. Local DNS for tenant subdomains (Mac)
+php artisan tenancy:local-setup
+# Copy the printed lines into /etc/hosts, then:
+
+# 5. Run dev servers (two terminals)
+php artisan serve --host=0.0.0.0 --port=8000
 npm run dev
 ```
 
-Then open http://127.0.0.1:8000.
+Set `APP_URL=http://scholaros.test:8000` in `.env` so generated links include port `:8000`.
+
+Sessions must stay on the **central** database (`SESSION_CONNECTION=central` in `.env`). Tenant databases do not have a `sessions` table — without this, login on a school subdomain returns **419 Page Expired**.
+
+If you still see 419 after updating `.env`, clear cookies for `.scholaros.test` in your browser and try again.
+
+**Important:** With `php artisan serve`, always include **`:8000`** in the URL. Visiting `http://abama-international.scholaros.test/login` (no port) hits Apache on port 80 and returns a server 404 — not Laravel.
+
+| URL | Purpose |
+|---|---|
+| http://scholaros.test:8000/login/platform | Platform / superadmin login |
+| http://scholaros.test:8000/login | School portal picker |
+| http://abama-international.scholaros.test:8000/login | ABAMA school admin login |
+
+Without `/etc/hosts`, platform login still works at http://127.0.0.1:8000/login/platform.
 
 ## Demo logins
 
-| Role | Email | Password |
-|---|---|---|
-| School admin | `admin@abama.edu.gh` | `password` |
-| Superadmin | `superadmin@scholaros.test` | `password` |
+| Role | URL | Email | Password |
+|---|---|---|---|
+| Platform superadmin | http://scholaros.test:8000/login/platform | `superadmin@scholaros.test` | `password` |
+| School admin (ABAMA) | http://abama-international.scholaros.test:8000/login | `admin@abama.edu.gh` | `password` |
 
 ## Project layout
 

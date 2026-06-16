@@ -11,6 +11,8 @@ class SchoolApplication extends Model
     use CamelCasesAttributes;
     use SoftDeletes;
 
+    protected $connection = 'central';
+
     protected $table = 'school_applications';
 
     protected $guarded = [];
