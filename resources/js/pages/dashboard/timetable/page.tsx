@@ -1,7 +1,8 @@
 import { useState } from "react";
-import { router } from "@inertiajs/react";
+import { router, usePage } from "@inertiajs/react";
 import { DashboardLayout } from "../_components/layout.tsx";
 import { useCurrentSchool } from "../_components/use-current-school.ts";
+import { defaultSemesterId, defaultTermId, defaultYearId, type SharedWithCalendar } from "@/lib/academic-calendar.ts";
 import { Button } from "@/components/ui/button.tsx";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card.tsx";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog.tsx";
@@ -60,6 +61,7 @@ const EMPTY_FORM: SlotForm = { subject: "", teacherId: "", room: "", startTime: 
 
 function TimetableInner({ classes, staff, slots }: PageProps) {
   const { schoolId } = useCurrentSchool();
+  const { academicCalendar } = usePage<SharedWithCalendar>().props;
   const [selectedClass, setSelectedClass] = useState<string>("");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editSlot, setEditSlot] = useState<TimetableSlot | null>(null);
@@ -128,7 +130,9 @@ function TimetableInner({ classes, staff, slots }: PageProps) {
         room: form.room || undefined,
         startTime: form.startTime,
         endTime: form.endTime,
-        academicYear: "2024-2025",
+        academicYearId: defaultYearId(academicCalendar) ?? undefined,
+        academicSemesterId: defaultSemesterId(academicCalendar, defaultYearId(academicCalendar)) ?? undefined,
+        academicTermId: defaultTermId(academicCalendar, defaultYearId(academicCalendar), defaultSemesterId(academicCalendar, defaultYearId(academicCalendar))) ?? undefined,
       }, options);
     }
   };

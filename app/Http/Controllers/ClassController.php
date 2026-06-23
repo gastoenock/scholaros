@@ -39,12 +39,13 @@ class ClassController extends Controller
             'section' => ['nullable', 'string'],
             'classTeacherId' => ['nullable', 'integer', 'exists:staff,id'],
             'room' => ['nullable', 'string'],
-            'academicYear' => ['required', 'string'],
+            ...$this->academicYearRules(true),
             'capacity' => ['nullable', 'integer'],
         ]);
 
         SchoolClass::create([
             ...$this->snakeKeys($validated),
+            ...$this->academicCalendar()->applyYear($schoolId, $validated),
             'school_id' => $schoolId,
         ]);
 
@@ -61,10 +62,16 @@ class ClassController extends Controller
             'section' => ['nullable', 'string'],
             'classTeacherId' => ['nullable', 'integer', 'exists:staff,id'],
             'room' => ['nullable', 'string'],
+            ...$this->academicYearRules(),
             'capacity' => ['nullable', 'integer'],
         ]);
 
-        $class->update($this->snakeKeys($validated));
+        $payload = $this->snakeKeys($validated);
+        if (isset($validated['academicYearId']) || isset($validated['academicYear'])) {
+            $payload = [...$payload, ...$this->academicCalendar()->applyYear($class->school_id, $validated)];
+        }
+
+        $class->update($payload);
 
         return back()->with('success', 'Class updated');
     }

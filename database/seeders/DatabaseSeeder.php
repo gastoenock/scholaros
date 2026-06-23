@@ -3,9 +3,9 @@
 namespace Database\Seeders;
 
 use App\Models\Admission;
-use App\Models\Asset;
 use App\Models\Assignment;
 use App\Models\AttendanceRecord;
+use App\Services\AcademicCalendarService;
 use App\Models\Bus;
 use App\Models\BusRoute;
 use App\Models\DormRoom;
@@ -33,16 +33,21 @@ use App\Models\TimetableSlot;
 use App\Models\User;
 use App\Services\AccountingService;
 use App\Support\TenantDatabaseCleaner;
+use Database\Seeders\Concerns\SeedsInventory;
 use Illuminate\Database\Seeder;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 
 class DatabaseSeeder extends Seeder
 {
+    use SeedsInventory;
+
     public function run(): void
     {
         if (School::query()->exists()) {
-            $this->command->warn('Database already seeded. Run migrate:fresh --seed to reset.');
+            $this->command->warn('Database already seeded. Syncing tenant databases...');
+            $this->syncTenants();
 
             return;
         }
@@ -58,10 +63,10 @@ class DatabaseSeeder extends Seeder
             'name' => 'ABAMA International Schools',
             'slug' => 'abama-international',
             'address' => '15 Education Drive',
-            'city' => 'Accra',
-            'state' => 'Greater Accra',
+            'city' => 'Dar es Salaam',
+            'state' => 'Tanzania',
             'zip' => '00233',
-            'phone' => '+233 302 111 222',
+            'phone' => '+255 712 345 678',
             'email' => 'admin@abama.edu.tz',
             'website' => 'https://abama.edu.tz',
             'is_active' => true,
@@ -86,6 +91,15 @@ class DatabaseSeeder extends Seeder
 
         $school->run(function () use ($school, $academicYear) {
             $schoolId = (int) tenant('id');
+
+            $calendar = app(AcademicCalendarService::class);
+            $currentYear = $calendar->createYearWithStructure($schoolId, $academicYear, true);
+            $nextYear = $calendar->createYearWithStructure($schoolId, '2026-2027', false);
+            $semester1 = $currentYear->semesters->firstWhere('name', 'Semester 1');
+            $semester2 = $currentYear->semesters->firstWhere('name', 'Semester 2');
+            $term1 = $semester1?->terms->firstWhere('name', 'Term 1');
+            $term2 = $semester1?->terms->firstWhere('name', 'Term 2');
+            $term3 = $semester2?->terms->firstWhere('name', 'Term 3');
 
             $admin = User::create([
                 'name' => 'Hassan Juma Mwinuka',
@@ -217,6 +231,7 @@ class DatabaseSeeder extends Seeder
                     'class_teacher_id' => $staffIds[$teacherKey],
                     'room' => $room,
                     'academic_year' => $academicYear,
+                    'academic_year_id' => $currentYear->id,
                     'capacity' => $capacity,
                 ]);
                 $classIds["$branch-$name"] = $class->id;
@@ -243,6 +258,16 @@ class DatabaseSeeder extends Seeder
                         $surname = $this->randomTzSurname();
                         $gender = rand(0, 1) ? 'male' : 'female';
                         $dob = sprintf('200%d-%02d-%02d', rand(8, 10) % 10, rand(1, 12), rand(1, 28));
+                        $areas = [
+                            ['city' => 'Dar es Salaam', 'address' => 'Kinondoni, Makumbusho Road'],
+                            ['city' => 'Dar es Salaam', 'address' => 'Ilala, Buguruni'],
+                            ['city' => 'Dar es Salaam', 'address' => 'Temeke, Mbagala'],
+                            ['city' => 'Dar es Salaam', 'address' => 'Ubungo, Kimara'],
+                            ['city' => 'Dar es Salaam', 'address' => 'Kijitonyama, Sam Nujoma Road'],
+                            ['city' => 'Arusha', 'address' => 'Sokon I, Ngarenaro'],
+                            ['city' => 'Mwanza', 'address' => 'Nyamagana, Capri Point'],
+                        ];
+                        $area = $areas[array_rand($areas)];
 
                         $student = Student::create([
                             'school_id' => $schoolId,
@@ -255,8 +280,11 @@ class DatabaseSeeder extends Seeder
                             'student_id' => $studentKey,
                             'grade_level' => $grade,
                             'class_section' => $section,
+                            'city' => $area['city'],
+                            'address' => $area['address'].' #'.rand(1, 200),
                             'enrollment_date' => '2024-09-02',
                             'academic_year' => $academicYear,
+                            'academic_year_id' => $currentYear->id,
                             'status' => 'active',
                             'guardians' => [[
                                 'name' => "Mr./Mrs. {$surname}",
@@ -297,6 +325,9 @@ class DatabaseSeeder extends Seeder
                     'code' => $code,
                     'grade_level' => $grade,
                     'teacher_id' => $staffIds[$teacherKey],
+                    'academic_year_id' => $currentYear->id,
+                    'academic_semester_id' => $semester1?->id,
+                    'academic_term_id' => $term1?->id,
                 ]);
                 $subjectIds[$code] = $subject->id;
             }
@@ -327,6 +358,9 @@ class DatabaseSeeder extends Seeder
                             'start_time' => $start,
                             'end_time' => $end,
                             'academic_year' => $academicYear,
+                            'academic_year_id' => $currentYear->id,
+                            'academic_semester_id' => $semester1?->id,
+                            'academic_term_id' => $term1?->id,
                         ]);
                     }
                 }
@@ -343,6 +377,9 @@ class DatabaseSeeder extends Seeder
                         'type' => 'student',
                         'person_id' => $student->student_id,
                         'status' => $statuses[array_rand($statuses)],
+                        'academic_year_id' => $currentYear->id,
+                        'academic_semester_id' => $semester1?->id,
+                        'academic_term_id' => $term2?->id,
                     ]);
                 }
             }
@@ -582,6 +619,7 @@ class DatabaseSeeder extends Seeder
                     'gender' => $gender,
                     'applying_for_grade' => $grade,
                     'academic_year' => '2026-2027',
+                    'academic_year_id' => $nextYear->id,
                     'guardian_name' => $gName,
                     'guardian_email' => $gEmail,
                     'guardian_phone' => $gPhone,
@@ -591,32 +629,9 @@ class DatabaseSeeder extends Seeder
                 ]);
             }
 
-            // ─── Assets ──────────────────────────────────────────────
-            $assets = [
-                ['Desktop Computer', 'IT Equipment', 'AST-IT-001', 'Computer Lab A', 3500, 25, 'good'],
-                ['Projector - Epson EB-X06', 'IT Equipment', 'AST-IT-002', 'Room A201', 2200, 8, 'good'],
-                ['Science Lab Microscope', 'Lab Equipment', 'AST-LAB-001', 'Science Lab', 800, 15, 'good'],
-                ['Student Desk Set', 'Furniture', 'AST-FUR-001', 'All Classrooms', 150, 300, 'good'],
-                ['Whiteboard (Large)', 'Furniture', 'AST-FUR-002', 'All Classrooms', 250, 20, 'good'],
-                ['Air Conditioner - 2HP', 'HVAC', 'AST-HV-001', 'Admin Block', 1800, 12, 'fair'],
-                ['Generator - 50KVA', 'Power', 'AST-PWR-001', 'Power House', 15000, 2, 'good'],
-                ['School Bus - Hyundai County', 'Vehicle', 'AST-VEH-001', 'Parking Lot', 65000, 2, 'good'],
-            ];
-            foreach ($assets as [$name, $category, $tag, $location, $cost, $qty, $condition]) {
-                Asset::create([
-                    'school_id' => $schoolId,
-                    'name' => $name,
-                    'category' => $category,
-                    'asset_tag' => $tag,
-                    'location' => $location,
-                    'purchase_date' => '2024-01-15',
-                    'purchase_cost' => $cost,
-                    'current_value' => (int) floor($cost * 0.8),
-                    'quantity' => $qty,
-                    'condition' => $condition,
-                    'status' => 'in_use',
-                ]);
-            }
+            // ─── Inventory ───────────────────────────────────────────
+            $vendorIds = $this->seedInventoryVendors($schoolId);
+            $this->seedInventoryAssets($schoolId, $vendorIds);
 
             // ─── Exams + results ─────────────────────────────────────
             $class7A = $classIds['ABAMA_A-Grade 7A'];
@@ -633,6 +648,9 @@ class DatabaseSeeder extends Seeder
                 'passing_score' => 50,
                 'term' => 'Term 2',
                 'academic_year' => $academicYear,
+                'academic_year_id' => $currentYear->id,
+                'academic_semester_id' => $semester1?->id,
+                'academic_term_id' => $term2?->id,
                 'venue' => 'Exam Hall A',
             ]);
 
@@ -648,6 +666,9 @@ class DatabaseSeeder extends Seeder
                 'passing_score' => 50,
                 'term' => 'Term 2',
                 'academic_year' => $academicYear,
+                'academic_year_id' => $currentYear->id,
+                'academic_semester_id' => $semester1?->id,
+                'academic_term_id' => $term2?->id,
                 'venue' => 'Exam Hall A',
             ]);
 
@@ -688,6 +709,9 @@ class DatabaseSeeder extends Seeder
                     'due_date' => $dueDate,
                     'max_score' => $maxScore,
                     'type' => $type,
+                    'academic_year_id' => $currentYear->id,
+                    'academic_semester_id' => $semester1?->id,
+                    'academic_term_id' => $term2?->id,
                 ]);
             }
 
@@ -900,6 +924,8 @@ class DatabaseSeeder extends Seeder
 
         });
 
+        $this->syncTenants();
+
         $this->command->info('Seeded ABAMA International Schools demo data.');
         $this->command->info('Platform: http://'.config('tenancy.central_domain').'/login/platform');
         $this->command->info('School: http://abama-international.'.config('tenancy.central_domain').'/login — admin@abama.edu.tz / password');
@@ -952,5 +978,27 @@ class DatabaseSeeder extends Seeder
         $names = $this->tzSurnames();
 
         return $names[array_rand($names)];
+    }
+
+    private function syncTenants(): void
+    {
+        if (! School::query()->exists()) {
+            return;
+        }
+
+        Artisan::call('tenants:migrate', ['--force' => true]);
+        $this->printArtisanOutput();
+
+        Artisan::call('tenants:seed', ['--force' => true]);
+        $this->printArtisanOutput();
+    }
+
+    private function printArtisanOutput(): void
+    {
+        $output = trim(Artisan::output());
+
+        if ($output !== '') {
+            $this->command->line($output);
+        }
     }
 }

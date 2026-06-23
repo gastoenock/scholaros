@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { router } from "@inertiajs/react";
 import { DashboardLayout } from "../_components/layout.tsx";
 import { useCurrentSchool } from "../_components/use-current-school.ts";
@@ -48,6 +48,11 @@ type FeePayment = {
   feeStructureId?: number | null;
   receiptNumber: string;
   amount: number;
+  feesDue?: number | null;
+  paidTotalBefore?: number | null;
+  paidTotalAfter?: number | null;
+  balanceBefore?: number | null;
+  balanceAfter?: number | null;
   paymentDate: string;
   method: string;
   paidFor: string;
@@ -76,12 +81,25 @@ type StudentOption = {
   firstName: string;
   lastName: string;
   studentId: string;
+  gradeLevel?: string | null;
+};
+
+type FeeBalancePreview = {
+  feesDue: number;
+  paidTotalBefore: number;
+  paidTotalAfter: number;
+  balanceBefore: number;
+  balanceAfter: number;
+  feeStructureId?: number | null;
+  feeStructureName?: string | null;
 };
 
 type Summary = {
   totalIncome: number;
   totalExpenses: number;
   netBalance: number;
+  totalCollected: number;
+  totalOutstanding: number;
   byMonth: Record<string, { income: number; expenses: number }>;
 };
 
@@ -133,6 +151,7 @@ function FinanceContent({ academicYear, reportAsOf, summary, payments, expenses,
   // Payment form state
   const [payForm, setPayForm] = useState({
     studentId: "",
+    feeStructureId: "",
     amount: "",
     paymentDate: new Date().toISOString().slice(0, 10),
     method: "cash" as "cash" | "card" | "online" | "bank_transfer" | "check",
@@ -141,6 +160,68 @@ function FinanceContent({ academicYear, reportAsOf, summary, payments, expenses,
     status: "paid" as "paid" | "partial" | "overdue" | "waived",
     notes: "",
   });
+  const [balancePreview, setBalancePreview] = useState<FeeBalancePreview | null>(null);
+  const [balanceLoading, setBalanceLoading] = useState(false);
+
+  const loadBalancePreview = useCallback(async () => {
+    if (!payForm.studentId) {
+      setBalancePreview(null);
+      return;
+    }
+
+    setBalanceLoading(true);
+    try {
+      const params = new URLSearchParams({
+        studentId: payForm.studentId,
+        academicYear,
+        amount: payForm.amount || "0",
+        status: payForm.status,
+      });
+      if (payForm.feeStructureId) params.set("feeStructureId", payForm.feeStructureId);
+
+      const csrf = document.querySelector('meta[name="csrf-token"]')?.getAttribute("content") ?? "";
+      const response = await fetch(`/dashboard/finance/fee-balance-preview?${params.toString()}`, {
+        headers: {
+          Accept: "application/json",
+          "X-Requested-With": "XMLHttpRequest",
+          "X-CSRF-TOKEN": csrf,
+        },
+        credentials: "same-origin",
+      });
+
+      if (!response.ok) {
+        setBalancePreview(null);
+        return;
+      }
+
+      setBalancePreview(await response.json() as FeeBalancePreview);
+    } finally {
+      setBalanceLoading(false);
+    }
+  }, [academicYear, payForm.amount, payForm.feeStructureId, payForm.status, payForm.studentId]);
+
+  useEffect(() => {
+    if (!paymentOpen || !payForm.studentId) {
+      setBalancePreview(null);
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      void loadBalancePreview();
+    }, 250);
+
+    return () => window.clearTimeout(timer);
+  }, [loadBalancePreview, paymentOpen, payForm.studentId, payForm.amount, payForm.status, payForm.feeStructureId]);
+
+  const matchingFeeStructures = useMemo(
+    () => feeStructures.filter((structure) => {
+      if (!payForm.studentId) return true;
+      const student = students.find((s) => String(s.id) === payForm.studentId);
+      if (!student?.gradeLevel) return true;
+      return !structure.gradeLevel || structure.gradeLevel === student.gradeLevel;
+    }),
+    [feeStructures, payForm.studentId, students],
+  );
 
   // Expense form state
   const [expForm, setExpForm] = useState({
@@ -167,6 +248,7 @@ function FinanceContent({ academicYear, reportAsOf, summary, payments, expenses,
     }
     router.post("/dashboard/finance/payments", {
       studentId: parseInt(payForm.studentId),
+      feeStructureId: payForm.feeStructureId ? parseInt(payForm.feeStructureId) : undefined,
       amount: parseFloat(payForm.amount),
       paymentDate: payForm.paymentDate,
       method: payForm.method,
@@ -180,7 +262,8 @@ function FinanceContent({ academicYear, reportAsOf, summary, payments, expenses,
       onSuccess: () => {
         toast.success("Payment recorded successfully");
         setPaymentOpen(false);
-        setPayForm({ studentId: "", amount: "", paymentDate: new Date().toISOString().slice(0, 10), method: "cash", paidFor: "", term: "Term 1", status: "paid", notes: "" });
+        setBalancePreview(null);
+        setPayForm({ studentId: "", feeStructureId: "", amount: "", paymentDate: new Date().toISOString().slice(0, 10), method: "cash", paidFor: "", term: "Term 1", status: "paid", notes: "" });
       },
       onError: () => toast.error("Failed to record payment"),
     });
@@ -347,7 +430,7 @@ function FinanceContent({ academicYear, reportAsOf, summary, payments, expenses,
               <div className="space-y-3 mt-2">
                 <div>
                   <Label>Student *</Label>
-                  <Select value={payForm.studentId} onValueChange={(v) => setPayForm({ ...payForm, studentId: v })}>
+                  <Select value={payForm.studentId} onValueChange={(v) => setPayForm({ ...payForm, studentId: v, feeStructureId: "" })}>
                     <SelectTrigger><SelectValue placeholder="Select student" /></SelectTrigger>
                     <SelectContent>
                       {students.map((s) => (
@@ -356,6 +439,59 @@ function FinanceContent({ academicYear, reportAsOf, summary, payments, expenses,
                     </SelectContent>
                   </Select>
                 </div>
+                {matchingFeeStructures.length > 0 && (
+                  <div>
+                    <Label>Fee Structure</Label>
+                    <Select value={payForm.feeStructureId || "auto"} onValueChange={(v) => setPayForm({ ...payForm, feeStructureId: v === "auto" ? "" : v })}>
+                      <SelectTrigger><SelectValue placeholder="Auto-match by grade" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="auto">Auto-match by grade</SelectItem>
+                        {matchingFeeStructures.map((structure) => (
+                          <SelectItem key={structure.id} value={String(structure.id)}>
+                            {structure.name}{structure.gradeLevel ? ` · ${structure.gradeLevel}` : ""} (${structure.totalAmount.toLocaleString()})
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+                {payForm.studentId && (
+                  <div className="rounded-lg border bg-muted/30 p-3 text-sm space-y-2">
+                    <p className="font-medium">Balance preview</p>
+                    {balanceLoading ? (
+                      <p className="text-muted-foreground">Calculating balances…</p>
+                    ) : balancePreview ? (
+                      <>
+                        {balancePreview.feeStructureName && (
+                          <p className="text-xs text-muted-foreground">Fee structure: {balancePreview.feeStructureName}</p>
+                        )}
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <p className="text-xs text-muted-foreground">Total fees due</p>
+                            <p className="font-semibold">${balancePreview.feesDue.toLocaleString()}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-muted-foreground">Paid before</p>
+                            <p className="font-semibold text-emerald-600">${balancePreview.paidTotalBefore.toLocaleString()}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-muted-foreground">Due before payment</p>
+                            <p className="font-semibold text-amber-600">${balancePreview.balanceBefore.toLocaleString()}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-muted-foreground">Due after payment</p>
+                            <p className="font-semibold text-blue-600">${balancePreview.balanceAfter.toLocaleString()}</p>
+                          </div>
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          Paid after: ${balancePreview.paidTotalAfter.toLocaleString()}
+                        </p>
+                      </>
+                    ) : (
+                      <p className="text-muted-foreground">Select a student to preview balances.</p>
+                    )}
+                  </div>
+                )}
                 <div><Label>Description / Paid For *</Label><Input value={payForm.paidFor} onChange={(e) => setPayForm({ ...payForm, paidFor: e.target.value })} placeholder="e.g. Tuition - Term 1" /></div>
                 <div className="grid grid-cols-2 gap-2">
                   <div><Label>Amount ($) *</Label><Input type="number" value={payForm.amount} onChange={(e) => setPayForm({ ...payForm, amount: e.target.value })} /></div>
@@ -409,7 +545,7 @@ function FinanceContent({ academicYear, reportAsOf, summary, payments, expenses,
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-start justify-between">
@@ -442,6 +578,18 @@ function FinanceContent({ academicYear, reportAsOf, summary, payments, expenses,
                 </p>
               </div>
               <div className="p-2 bg-primary/10 rounded-lg"><DollarSign className="h-5 w-5 text-primary" /></div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">Outstanding Fees</p>
+                <p className="text-2xl font-bold text-amber-600">${(summary.totalOutstanding ?? 0).toLocaleString()}</p>
+                <p className="text-xs text-muted-foreground mt-1">Collected: ${(summary.totalCollected ?? 0).toLocaleString()}</p>
+              </div>
+              <div className="p-2 bg-amber-100 rounded-lg"><Receipt className="h-5 w-5 text-amber-600" /></div>
             </div>
           </CardContent>
         </Card>
@@ -494,6 +642,9 @@ function FinanceContent({ academicYear, reportAsOf, summary, payments, expenses,
                         <th className="text-left py-2 pr-4 font-medium text-muted-foreground">Student</th>
                         <th className="text-left py-2 pr-4 font-medium text-muted-foreground">Description</th>
                         <th className="text-left py-2 pr-4 font-medium text-muted-foreground">Amount</th>
+                        <th className="text-left py-2 pr-4 font-medium text-muted-foreground">Due Before</th>
+                        <th className="text-left py-2 pr-4 font-medium text-muted-foreground">Due After</th>
+                        <th className="text-left py-2 pr-4 font-medium text-muted-foreground">Paid After</th>
                         <th className="text-left py-2 pr-4 font-medium text-muted-foreground">Date</th>
                         <th className="text-left py-2 pr-4 font-medium text-muted-foreground">Method</th>
                         <th className="text-left py-2 pr-4 font-medium text-muted-foreground">Status</th>
@@ -507,6 +658,15 @@ function FinanceContent({ academicYear, reportAsOf, summary, payments, expenses,
                           <td className="py-2 pr-4">{p.studentName}</td>
                           <td className="py-2 pr-4">{p.paidFor}</td>
                           <td className="py-2 pr-4 font-semibold">${p.amount.toLocaleString()}</td>
+                          <td className="py-2 pr-4 text-amber-700">
+                            {p.balanceBefore != null ? `$${p.balanceBefore.toLocaleString()}` : "—"}
+                          </td>
+                          <td className="py-2 pr-4 text-blue-700">
+                            {p.balanceAfter != null ? `$${p.balanceAfter.toLocaleString()}` : "—"}
+                          </td>
+                          <td className="py-2 pr-4 text-emerald-700">
+                            {p.paidTotalAfter != null ? `$${p.paidTotalAfter.toLocaleString()}` : "—"}
+                          </td>
                           <td className="py-2 pr-4 text-muted-foreground">{p.paymentDate}</td>
                           <td className="py-2 pr-4 capitalize">{p.method.replace("_", " ")}</td>
                           <td className="py-2 pr-4">

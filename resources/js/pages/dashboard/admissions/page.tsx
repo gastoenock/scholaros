@@ -1,7 +1,9 @@
 import { useMemo, useState, type ElementType } from "react";
-import { router } from "@inertiajs/react";
+import { router, usePage } from "@inertiajs/react";
 import { DashboardLayout } from "../_components/layout.tsx";
 import { useCurrentSchool } from "../_components/use-current-school.ts";
+import { AcademicSemesterField, AcademicYearField } from "@/components/academic-calendar-fields.tsx";
+import { defaultSemesterId, defaultYearId, type SharedWithCalendar } from "@/lib/academic-calendar.ts";
 import { Button } from "@/components/ui/button.tsx";
 import { Input } from "@/components/ui/input.tsx";
 import { Label } from "@/components/ui/label.tsx";
@@ -70,7 +72,6 @@ const admissionSchema = z.object({
   dateOfBirth: z.string().optional(),
   gender: z.enum(["male", "female", "other"]).optional(),
   applyingForGrade: z.string().min(1, "Required"),
-  academicYear: z.string().min(1, "Required"),
   previousSchool: z.string().optional(),
   guardianName: z.string().min(1, "Required"),
   guardianEmail: z.string().email("Valid email required"),
@@ -90,15 +91,25 @@ const statusConfig: Record<string, { label: string; color: string; icon: Element
 };
 
 function NewAdmissionDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const { academicCalendar } = usePage<SharedWithCalendar>().props;
+  const [academicYearId, setAcademicYearId] = useState<number | null>(() => defaultYearId(academicCalendar));
+  const [academicSemesterId, setAcademicSemesterId] = useState<number | null>(() =>
+    defaultSemesterId(academicCalendar, defaultYearId(academicCalendar)),
+  );
+
   const { register, handleSubmit, setValue, formState: { errors, isSubmitting }, reset } =
     useForm<AdmissionFormData>({
       resolver: zodResolver(admissionSchema),
-      defaultValues: { academicYear: "2024-2025", guardianRelationship: "Parent" },
+      defaultValues: { guardianRelationship: "Parent" },
     });
 
   const onSubmit = (data: AdmissionFormData) =>
     new Promise<void>((resolve) => {
-      router.post("/dashboard/admissions", data, {
+      router.post("/dashboard/admissions", {
+        ...data,
+        academicYearId: academicYearId ?? undefined,
+        academicSemesterId: academicSemesterId ?? undefined,
+      }, {
         preserveScroll: true,
         onSuccess: () => {
           toast.success("Admission application submitted!");
@@ -157,8 +168,23 @@ function NewAdmissionDialog({ open, onClose }: { open: boolean; onClose: () => v
                 {errors.applyingForGrade && <p className="text-destructive text-xs mt-1">{errors.applyingForGrade.message}</p>}
               </div>
               <div>
-                <Label className="mb-1.5 block">Academic Year *</Label>
-                <Input placeholder="2024-2025" {...register("academicYear")} />
+                <AcademicYearField
+                  calendar={academicCalendar}
+                  value={academicYearId}
+                  onChange={(yearId) => {
+                    setAcademicYearId(yearId);
+                    setAcademicSemesterId(defaultSemesterId(academicCalendar, yearId));
+                  }}
+                  required
+                />
+              </div>
+              <div>
+                <AcademicSemesterField
+                  calendar={academicCalendar}
+                  yearId={academicYearId}
+                  value={academicSemesterId}
+                  onChange={setAcademicSemesterId}
+                />
               </div>
               <div className="col-span-2">
                 <Label className="mb-1.5 block">Previous School</Label>

@@ -4,6 +4,7 @@ use App\Http\Controllers\FinanceController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/finance', [FinanceController::class, 'index'])->name('finance.index');
+Route::get('/finance/fee-balance-preview', [FinanceController::class, 'feeBalancePreview'])->name('finance.fee-balance-preview');
 
 Route::post('/finance/fee-structures', [FinanceController::class, 'storeFeeStructure'])->name('finance.fee-structures.store');
 Route::delete('/finance/fee-structures/{feeStructure}', [FinanceController::class, 'destroyFeeStructure'])->name('finance.fee-structures.destroy');

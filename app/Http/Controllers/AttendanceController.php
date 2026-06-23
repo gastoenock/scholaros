@@ -43,7 +43,12 @@ class AttendanceController extends Controller
             'records.*.status' => ['required', 'in:present,absent,late,excused'],
             'records.*.classId' => ['nullable', 'integer', 'exists:classes,id'],
             'records.*.note' => ['nullable', 'string'],
+            ...$this->academicYearRules(),
+            ...$this->academicSemesterRules(),
+            ...$this->academicTermRules(),
         ]);
+
+        $calendar = $this->academicCalendar()->applyCalendar($schoolId, $validated, false);
 
         $personIds = collect($validated['records'])->pluck('personId');
 
@@ -65,6 +70,7 @@ class AttendanceController extends Controller
                 'class_id' => $rec['classId'] ?? null,
                 'marked_by' => $markedBy,
                 'note' => $rec['note'] ?? null,
+                ...$calendar,
             ]);
         }
 

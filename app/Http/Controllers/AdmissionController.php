@@ -47,18 +47,20 @@ class AdmissionController extends Controller
             'dateOfBirth' => ['nullable', 'string'],
             'gender' => ['nullable', 'in:male,female,other'],
             'applyingForGrade' => ['required', 'string'],
-            'academicYear' => ['required', 'string'],
             'previousSchool' => ['nullable', 'string'],
             'guardianName' => ['required', 'string'],
             'guardianEmail' => ['required', 'string', 'email'],
             'guardianPhone' => ['required', 'string'],
             'guardianRelationship' => ['required', 'string'],
+            ...$this->academicYearRules(true),
+            ...$this->academicSemesterRules(),
         ]);
 
         $count = Admission::forSchool($schoolId)->count();
 
         Admission::create([
             ...$this->snakeKeys($validated),
+            ...$this->academicCalendar()->applyYearAndSemester($schoolId, $validated, false),
             'school_id' => $schoolId,
             'application_id' => sprintf('APP-%d-%03d', now()->year, $count + 1),
             'status' => 'submitted',
@@ -106,6 +108,7 @@ class AdmissionController extends Controller
             'student_id' => sprintf('STU-%04d', $count + 1),
             'grade_level' => $admission->applying_for_grade,
             'academic_year' => $admission->academic_year,
+            'academic_year_id' => $admission->academic_year_id,
             'guardians' => [[
                 'name' => $admission->guardian_name,
                 'relationship' => $admission->guardian_relationship,

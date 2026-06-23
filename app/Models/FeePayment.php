@@ -17,6 +17,11 @@ class FeePayment extends Model
 
     protected $casts = [
         'amount' => 'float',
+        'fees_due' => 'float',
+        'paid_total_before' => 'float',
+        'paid_total_after' => 'float',
+        'balance_before' => 'float',
+        'balance_after' => 'float',
     ];
 
     public function scopeForSchool($query, $schoolId)

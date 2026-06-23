@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Http\Controllers\AuthController;
+use App\Http\Controllers\AssetPublicController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\LandlordController;
 use App\Http\Middleware\ForgetTenantDomainParameter;
@@ -21,6 +22,10 @@ Route::domain('{schoolSlug}.'.$centralDomain)
         PreventAccessFromCentralDomains::class,
     ])
     ->group(function () {
+        Route::get('/asset/{publicUuid}', [AssetPublicController::class, 'show'])
+            ->whereUuid('publicUuid')
+            ->name('assets.public');
+
         Route::get('/', fn () => redirect('/dashboard'));
 
         Route::middleware('guest:web')->group(function () {

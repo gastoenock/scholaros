@@ -13,4 +13,6 @@ Route::put('/transport/buses/{bus}', [TransportController::class, 'updateBus'])-
 Route::delete('/transport/buses/{bus}', [TransportController::class, 'destroyBus'])->name('transport.buses.destroy');
 
 Route::post('/transport/assignments', [TransportController::class, 'storeAssignment'])->name('transport.assignments.store');
+Route::post('/transport/assignments/bulk', [TransportController::class, 'bulkStoreAssignments'])->name('transport.assignments.bulk');
+Route::put('/transport/assignments/{transportAssignment}', [TransportController::class, 'updateAssignment'])->name('transport.assignments.update');
 Route::delete('/transport/assignments/{transportAssignment}', [TransportController::class, 'destroyAssignment'])->name('transport.assignments.destroy');

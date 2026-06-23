@@ -3,6 +3,7 @@
 namespace App\Http\Middleware;
 
 use App\Models\School;
+use App\Services\AcademicCalendarService;
 use App\Support\TenancyUrl;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
@@ -47,6 +48,8 @@ class HandleInertiaRequests extends Middleware
                     'schoolId' => $tenantId,
                     'avatar' => $user->avatar ?? null,
                     'phone' => $user->phone ?? null,
+                    'preferences' => app(\App\Services\SettingsService::class)
+                        ->resolveUserPreferences($user->preferences ?? null),
                 ] : null,
             ],
             'platform' => [
@@ -71,6 +74,9 @@ class HandleInertiaRequests extends Middleware
                 'success' => $request->session()->get('success'),
                 'error' => $request->session()->get('error'),
             ],
+            'academicCalendar' => $tenantId && tenancy()->initialized
+                ? app(AcademicCalendarService::class)->uiPayload($tenantId)
+                : null,
         ];
     }
 }

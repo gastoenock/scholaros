@@ -12,7 +12,10 @@ import {
   Home,
   Bell,
   BarChart3,
-  Settings,
+  SlidersHorizontal,
+  Cog,
+  Shield,
+  UserCircle,
   LogOut,
   Menu,
   X,
@@ -22,6 +25,8 @@ import {
   Package,
   UserCheck,
   Handshake,
+  CalendarRange,
+  FileBarChart,
 } from "lucide-react";
 import { useState } from "react";
 import { useAuth } from "@/hooks/use-auth.ts";
@@ -46,7 +51,8 @@ type NavItem = {
 const navItems: NavItem[] = [
   { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { label: "Schools", href: "/dashboard/schools", icon: School, roles: ["superadmin", "landlord"] },
-  { label: "Admin Panel", href: "/dashboard/admin", icon: Settings, roles: ["superadmin", "landlord"] },
+  { label: "Admin Panel", href: "/dashboard/admin", icon: Shield, roles: ["superadmin", "landlord"] },
+  { label: "System Settings", href: "/dashboard/admin/settings", icon: Cog, roles: ["superadmin", "landlord"] },
   { label: "Parent Portal", href: "/dashboard/parent-portal", icon: UserCheck, roles: ["parent"] },
   { label: "Students", href: "/dashboard/students", icon: Users, roles: ["admin", "teacher", "superadmin"] },
   { label: "Staff", href: "/dashboard/staff", icon: Users, roles: ["admin", "superadmin"] },
@@ -55,21 +61,24 @@ const navItems: NavItem[] = [
   { label: "Attendance", href: "/dashboard/attendance", icon: Calendar, roles: ["admin", "teacher", "superadmin"] },
   { label: "Timetable", href: "/dashboard/timetable", icon: Calendar, roles: ["admin", "teacher", "student", "superadmin"] },
   { label: "Academics", href: "/dashboard/academics", icon: BookOpen, roles: ["admin", "teacher", "student", "parent", "superadmin"] },
+  { label: "Exam Reports", href: "/dashboard/academics/reports", icon: FileBarChart, roles: ["admin", "teacher", "superadmin"] },
+  { label: "Academic Calendar", href: "/dashboard/academic-calendar", icon: CalendarRange, roles: ["admin", "superadmin"] },
   { label: "Meetings", href: "/dashboard/meetings", icon: Handshake, roles: ["admin", "teacher", "parent", "superadmin"] },
   { label: "Events", href: "/dashboard/events", icon: Calendar, roles: ["admin", "teacher", "superadmin"] },
   { label: "Finance", href: "/dashboard/finance", icon: CreditCard, roles: ["admin", "parent", "superadmin"] },
   { label: "Payroll & HR", href: "/dashboard/payroll", icon: Users, roles: ["admin", "superadmin"] },
   { label: "Transport", href: "/dashboard/transport", icon: Bus, roles: ["admin", "parent", "superadmin"] },
   { label: "Dormitory", href: "/dashboard/dormitory", icon: Home, roles: ["admin", "superadmin"] },
-  { label: "Assets", href: "/dashboard/assets", icon: Package, roles: ["admin", "superadmin"] },
+  { label: "Inventory", href: "/dashboard/assets", icon: Package, roles: ["admin", "superadmin"] },
   { label: "Analytics", href: "/dashboard/analytics", icon: BarChart3, roles: ["admin", "superadmin"] },
   { label: "Messages", href: "/dashboard/messages", icon: Bell, roles: ["admin", "teacher", "student", "parent", "superadmin"] },
   { label: "Notifications", href: "/dashboard/notifications", icon: Bell, roles: ["admin", "teacher", "student", "parent", "superadmin"] },
   { label: "Library", href: "/dashboard/library", icon: BookOpen, roles: ["admin", "teacher", "student", "superadmin"] },
   { label: "Buildings", href: "/dashboard/campus", icon: Building2, roles: ["admin", "superadmin"] },
+  { label: "Settings", href: "/dashboard/settings", icon: SlidersHorizontal, roles: ["admin", "superadmin"] },
 ];
 
-const platformOnlyLabels = new Set(["Dashboard", "Schools", "Admin Panel"]);
+const platformOnlyLabels = new Set(["Dashboard", "Schools", "Admin Panel", "System Settings"]);
 
 function canAccessNavItem(item: NavItem, role: string): boolean {
   if (!item.roles) {
@@ -217,6 +226,12 @@ function SidebarContent({
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent side="top" align="start" className="w-56">
+            <DropdownMenuItem asChild>
+              <Link href="/dashboard/profile" className="cursor-pointer">
+                <UserCircle className="h-4 w-4 mr-2" />
+                My Profile
+              </Link>
+            </DropdownMenuItem>
             <DropdownMenuItem onClick={handleSignOut} className="cursor-pointer text-destructive">
               <LogOut className="h-4 w-4 mr-2" />
               Sign Out

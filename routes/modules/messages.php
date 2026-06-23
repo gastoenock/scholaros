@@ -10,5 +10,6 @@ Route::post('/messages/read-thread', [MessageController::class, 'markThreadRead'
 Route::delete('/messages/{message}', [MessageController::class, 'destroy'])->name('messages.destroy');
 
 Route::post('/calls', [CallController::class, 'store'])->name('calls.store');
+Route::get('/calls/{callSession}/token', [CallController::class, 'token'])->name('calls.token');
 Route::post('/calls/{callSession}/join', [CallController::class, 'join'])->name('calls.join');
 Route::post('/calls/{callSession}/end', [CallController::class, 'end'])->name('calls.end');

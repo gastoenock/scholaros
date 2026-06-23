@@ -1,7 +1,8 @@
 import { useMemo, useState } from "react";
-import { router } from "@inertiajs/react";
+import { router, usePage } from "@inertiajs/react";
 import { DashboardLayout } from "../_components/layout.tsx";
 import { useCurrentSchool } from "../_components/use-current-school.ts";
+import { defaultSemesterId, defaultTermId, defaultYearId, type SharedWithCalendar } from "@/lib/academic-calendar.ts";
 import { Button } from "@/components/ui/button.tsx";
 import { Card, CardContent } from "@/components/ui/card.tsx";
 import {
@@ -40,6 +41,7 @@ type AttendanceRecord = {
 
 function AttendanceContent({ classes, students, staff, records }: PageProps) {
   const { schoolId } = useCurrentSchool();
+  const { academicCalendar } = usePage<SharedWithCalendar>().props;
   const [tab, setTab] = useState<"student" | "staff">("student");
   const [date, setDate] = useState(() => format(new Date(), "yyyy-MM-dd"));
   const [selectedClass, setSelectedClass] = useState<string>("all");
@@ -99,6 +101,9 @@ function AttendanceContent({ classes, students, staff, records }: PageProps) {
     router.post("/dashboard/attendance", {
       date,
       type: tab,
+      academicYearId: defaultYearId(academicCalendar) ?? undefined,
+      academicSemesterId: defaultSemesterId(academicCalendar, defaultYearId(academicCalendar)) ?? undefined,
+      academicTermId: defaultTermId(academicCalendar, defaultYearId(academicCalendar), defaultSemesterId(academicCalendar, defaultYearId(academicCalendar))) ?? undefined,
       records: people.map((p) => ({
         personId: String(p.id),
         status: getStatus(p.id),

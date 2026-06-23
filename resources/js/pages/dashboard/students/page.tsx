@@ -1,7 +1,9 @@
 import { useMemo, useState } from "react";
-import { Link, router } from "@inertiajs/react";
+import { Link, router, usePage } from "@inertiajs/react";
 import { DashboardLayout } from "../_components/layout.tsx";
 import { useCurrentSchool } from "../_components/use-current-school.ts";
+import { AcademicYearField } from "@/components/academic-calendar-fields.tsx";
+import { defaultYearId, type SharedWithCalendar } from "@/lib/academic-calendar.ts";
 import { Button } from "@/components/ui/button.tsx";
 import { Input } from "@/components/ui/input.tsx";
 import { Label } from "@/components/ui/label.tsx";
@@ -57,6 +59,7 @@ export type Student = {
   classSection?: string | null;
   enrollmentDate?: string | null;
   academicYear?: string | null;
+  academicYearId?: number | null;
   address?: string | null;
   city?: string | null;
   state?: string | null;
@@ -91,7 +94,6 @@ const studentSchema = z.object({
   bloodGroup: z.string().optional(),
   medicalNotes: z.string().optional(),
   enrollmentDate: z.string().optional(),
-  academicYear: z.string().optional(),
   guardians: z.array(z.object({
     name: z.string().min(1, "Required"),
     relationship: z.string().min(1, "Required"),
@@ -123,6 +125,10 @@ function StudentFormDialog({
   branches: Branch[];
 }) {
   const isEdit = !!editStudent;
+  const { academicCalendar } = usePage<SharedWithCalendar>().props;
+  const [academicYearId, setAcademicYearId] = useState<number | null>(() =>
+    editStudent?.academicYearId ?? defaultYearId(academicCalendar),
+  );
 
   const { register, handleSubmit, control, setValue, formState: { errors, isSubmitting }, reset } =
     useForm<StudentFormData>({
@@ -143,13 +149,11 @@ function StudentFormDialog({
         bloodGroup: editStudent.bloodGroup ?? undefined,
         medicalNotes: editStudent.medicalNotes ?? undefined,
         enrollmentDate: editStudent.enrollmentDate ?? undefined,
-        academicYear: editStudent.academicYear ?? undefined,
         guardians: editStudent.guardians ?? [],
       } : {
         guardians: [{ name: "", relationship: "", phone: "", email: "", isEmergencyContact: true }],
         city: "Philadelphia",
         state: "PA",
-        academicYear: "2024-2025",
       },
     });
 
@@ -167,6 +171,7 @@ function StudentFormDialog({
       const payload = {
         ...data,
         email: data.email || undefined,
+        academicYearId: academicYearId ?? undefined,
         schoolBranchId: selectedBranchId ? parseInt(selectedBranchId, 10) : undefined,
       };
       const options = {
@@ -285,8 +290,11 @@ function StudentFormDialog({
                   <Input type="date" {...register("enrollmentDate")} />
                 </div>
                 <div>
-                  <Label className="mb-1.5 block">Academic Year</Label>
-                  <Input placeholder="2024-2025" {...register("academicYear")} />
+                  <AcademicYearField
+                    calendar={academicCalendar}
+                    value={academicYearId}
+                    onChange={setAcademicYearId}
+                  />
                 </div>
                 {branches.length > 0 && (
                   <div className="col-span-2">

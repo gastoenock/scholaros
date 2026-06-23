@@ -4,16 +4,20 @@ namespace App\Http\Controllers;
 
 use App\Models\Admission;
 use App\Models\AttendanceRecord;
-use App\Models\FeePayment;
 use App\Models\School;
 use App\Models\SchoolApplication;
 use App\Models\Staff;
 use App\Models\Student;
+use App\Services\StudentFeeBalanceService;
 use Inertia\Inertia;
 use Inertia\Response;
 
 class DashboardController extends Controller
 {
+    public function __construct(
+        private StudentFeeBalanceService $feeBalances,
+    ) {}
+
     public function index(): Response
     {
         $user = auth()->user();
@@ -67,9 +71,10 @@ class DashboardController extends Controller
             'todayAttendance' => $todayRecords->isNotEmpty()
                 ? round($presentToday / $todayRecords->count() * 100).'%'
                 : null,
-            'pendingFees' => (float) FeePayment::forSchool($schoolId)
-                ->where('status', 'pending')
-                ->sum('amount'),
+            'pendingFees' => $this->feeBalances->totalOutstandingForSchool(
+                $schoolId,
+                sprintf('%d-%d', now()->year, now()->year + 1),
+            ),
         ];
 
         return [

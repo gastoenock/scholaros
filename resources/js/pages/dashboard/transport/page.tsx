@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { router } from "@inertiajs/react";
 import { DashboardLayout } from "../_components/layout.tsx";
 import { useCurrentSchool } from "../_components/use-current-school.ts";
@@ -9,15 +9,39 @@ import { Label } from "@/components/ui/label.tsx";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select.tsx";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs.tsx";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog.tsx";
+import { Checkbox } from "@/components/ui/checkbox.tsx";
+import { Badge } from "@/components/ui/badge.tsx";
 import { toast } from "sonner";
 import { routerDeleteWithConfirm } from "@/lib/confirm.ts";
 import { cn } from "@/lib/utils.ts";
 import {
   Bus, MapPin, Users, Plus, Trash2, Navigation,
-  Phone, User, Route,
+  Phone, User, Route, Pencil, UserPlus, Filter, X,
 } from "lucide-react";
 
 const CURRENT_YEAR = `${new Date().getFullYear()}-${new Date().getFullYear() + 1}`;
+
+type StudentFilters = {
+  search: string;
+  classSection: string;
+  gradeLevel: string;
+  city: string;
+  location: string;
+  ageMin: string;
+  ageMax: string;
+  gender: string;
+};
+
+const DEFAULT_STUDENT_FILTERS: StudentFilters = {
+  search: "",
+  classSection: "all",
+  gradeLevel: "all",
+  city: "all",
+  location: "",
+  ageMin: "",
+  ageMax: "",
+  gender: "all",
+};
 
 // Simulated Philadelphia coordinates for GPS demo
 const PHILLY_COORDS = [
@@ -82,6 +106,13 @@ type StudentLite = {
   id: number;
   firstName: string;
   lastName: string;
+  studentId?: string;
+  classSection?: string | null;
+  gradeLevel?: string | null;
+  dateOfBirth?: string | null;
+  city?: string | null;
+  address?: string | null;
+  gender?: string | null;
 };
 
 type PageProps = {
@@ -91,12 +122,347 @@ type PageProps = {
   students: StudentLite[];
 };
 
+function getStudentAge(dateOfBirth?: string | null): number | null {
+  if (!dateOfBirth) return null;
+  const dob = new Date(dateOfBirth);
+  if (Number.isNaN(dob.getTime())) return null;
+  const today = new Date();
+  let age = today.getFullYear() - dob.getFullYear();
+  const monthDiff = today.getMonth() - dob.getMonth();
+  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < dob.getDate())) {
+    age -= 1;
+  }
+  return age;
+}
+
+function matchesStudentFilters(
+  student: StudentLite | undefined,
+  filters: StudentFilters,
+  assignment?: { pickupStop?: string; dropStop?: string },
+): boolean {
+  if (filters.search.trim()) {
+    const query = filters.search.trim().toLowerCase();
+    const haystack = [
+      student?.firstName,
+      student?.lastName,
+      student?.studentId,
+      `${student?.firstName ?? ""} ${student?.lastName ?? ""}`,
+    ].join(" ").toLowerCase();
+    if (!haystack.includes(query)) return false;
+  }
+
+  if (filters.classSection !== "all" && student?.classSection !== filters.classSection) return false;
+  if (filters.gradeLevel !== "all" && student?.gradeLevel !== filters.gradeLevel) return false;
+  if (filters.city !== "all" && student?.city !== filters.city) return false;
+  if (filters.gender !== "all" && student?.gender !== filters.gender) return false;
+
+  if (filters.location.trim()) {
+    const query = filters.location.trim().toLowerCase();
+    const locationHaystack = [
+      student?.city,
+      student?.address,
+      assignment?.pickupStop,
+      assignment?.dropStop,
+    ].filter(Boolean).join(" ").toLowerCase();
+    if (!locationHaystack.includes(query)) return false;
+  }
+
+  const age = getStudentAge(student?.dateOfBirth);
+  if (filters.ageMin && (age === null || age < parseInt(filters.ageMin, 10))) return false;
+  if (filters.ageMax && (age === null || age > parseInt(filters.ageMax, 10))) return false;
+
+  return true;
+}
+
+function StudentFilterFields({
+  filters,
+  onChange,
+  classSections,
+  gradeLevels,
+  cities,
+  layout = "default",
+  assignmentExtras,
+}: {
+  filters: StudentFilters;
+  onChange: (next: StudentFilters) => void;
+  classSections: string[];
+  gradeLevels: string[];
+  cities: string[];
+  layout?: "default" | "columns";
+  assignmentExtras?: {
+    busId: string;
+    routeId: string;
+    pickupStop: string;
+    status: string;
+    onChange: (patch: { busId?: string; routeId?: string; pickupStop?: string; status?: string }) => void;
+    buses: BusRecord[];
+    routes: BusRoute[];
+    pickupStops: string[];
+  };
+}) {
+  const update = (patch: Partial<StudentFilters>) => onChange({ ...filters, ...patch });
+
+  const searchField = (
+    <div className={layout === "default" ? "col-span-2" : undefined}>
+      <Label>Search</Label>
+      <Input
+        placeholder="Name or student ID..."
+        value={filters.search}
+        onChange={(e) => update({ search: e.target.value })}
+      />
+    </div>
+  );
+
+  const otherFields = (
+    <>
+      <div>
+        <Label>Class</Label>
+        <Select value={filters.classSection} onValueChange={(v) => update({ classSection: v })}>
+          <SelectTrigger><SelectValue placeholder="All classes" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All classes</SelectItem>
+            {classSections.map((section) => (
+              <SelectItem key={section} value={section}>{section}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      <div>
+        <Label>Grade</Label>
+        <Select value={filters.gradeLevel} onValueChange={(v) => update({ gradeLevel: v })}>
+          <SelectTrigger><SelectValue placeholder="All grades" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All grades</SelectItem>
+            {gradeLevels.map((grade) => (
+              <SelectItem key={grade} value={grade}>{grade}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      <div>
+        <Label>City</Label>
+        <Select value={filters.city} onValueChange={(v) => update({ city: v })}>
+          <SelectTrigger><SelectValue placeholder="All cities" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All cities</SelectItem>
+            {cities.map((city) => (
+              <SelectItem key={city} value={city}>{city}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      <div>
+        <Label>Location / Area</Label>
+        <Input
+          placeholder="Address or pickup area..."
+          value={filters.location}
+          onChange={(e) => update({ location: e.target.value })}
+        />
+      </div>
+      <div>
+        <Label>Min Age</Label>
+        <Input
+          type="number"
+          min={0}
+          placeholder="Any"
+          value={filters.ageMin}
+          onChange={(e) => update({ ageMin: e.target.value })}
+        />
+      </div>
+      <div>
+        <Label>Max Age</Label>
+        <Input
+          type="number"
+          min={0}
+          placeholder="Any"
+          value={filters.ageMax}
+          onChange={(e) => update({ ageMax: e.target.value })}
+        />
+      </div>
+      <div>
+        <Label>Gender</Label>
+        <Select value={filters.gender} onValueChange={(v) => update({ gender: v })}>
+          <SelectTrigger><SelectValue placeholder="All" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All</SelectItem>
+            <SelectItem value="male">Male</SelectItem>
+            <SelectItem value="female">Female</SelectItem>
+            <SelectItem value="other">Other</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+    </>
+  );
+
+  if (layout === "columns") {
+    const classField = (
+      <div>
+        <Label>Class</Label>
+        <Select value={filters.classSection} onValueChange={(v) => update({ classSection: v })}>
+          <SelectTrigger><SelectValue placeholder="All classes" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All classes</SelectItem>
+            {classSections.map((section) => (
+              <SelectItem key={section} value={section}>{section}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+    );
+    const gradeField = (
+      <div>
+        <Label>Grade</Label>
+        <Select value={filters.gradeLevel} onValueChange={(v) => update({ gradeLevel: v })}>
+          <SelectTrigger><SelectValue placeholder="All grades" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All grades</SelectItem>
+            {gradeLevels.map((grade) => (
+              <SelectItem key={grade} value={grade}>{grade}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+    );
+    const genderField = (
+      <div>
+        <Label>Gender</Label>
+        <Select value={filters.gender} onValueChange={(v) => update({ gender: v })}>
+          <SelectTrigger><SelectValue placeholder="All" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All</SelectItem>
+            <SelectItem value="male">Male</SelectItem>
+            <SelectItem value="female">Female</SelectItem>
+            <SelectItem value="other">Other</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+    );
+
+    return (
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+        <div className="space-y-3">
+          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Student</p>
+          {searchField}
+          {classField}
+          {gradeField}
+          {genderField}
+        </div>
+        <div className="space-y-3">
+          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Location & Age</p>
+          <div>
+            <Label>City</Label>
+            <Select value={filters.city} onValueChange={(v) => update({ city: v })}>
+              <SelectTrigger><SelectValue placeholder="All cities" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All cities</SelectItem>
+                {cities.map((city) => (
+                  <SelectItem key={city} value={city}>{city}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label>Location / Area</Label>
+            <Input
+              placeholder="Address or pickup area..."
+              value={filters.location}
+              onChange={(e) => update({ location: e.target.value })}
+            />
+          </div>
+          <div>
+            <Label>Min Age</Label>
+            <Input
+              type="number"
+              min={0}
+              placeholder="Any"
+              value={filters.ageMin}
+              onChange={(e) => update({ ageMin: e.target.value })}
+            />
+          </div>
+          <div>
+            <Label>Max Age</Label>
+            <Input
+              type="number"
+              min={0}
+              placeholder="Any"
+              value={filters.ageMax}
+              onChange={(e) => update({ ageMax: e.target.value })}
+            />
+          </div>
+        </div>
+        {assignmentExtras && (
+          <div className="space-y-3">
+            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Transport</p>
+            <div>
+              <Label>Bus</Label>
+              <Select value={assignmentExtras.busId} onValueChange={(v) => assignmentExtras.onChange({ busId: v })}>
+                <SelectTrigger><SelectValue placeholder="All buses" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All buses</SelectItem>
+                  {assignmentExtras.buses.map((b) => (
+                    <SelectItem key={b.id} value={String(b.id)}>Bus {b.busNumber}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Route</Label>
+              <Select value={assignmentExtras.routeId} onValueChange={(v) => assignmentExtras.onChange({ routeId: v })}>
+                <SelectTrigger><SelectValue placeholder="All routes" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All routes</SelectItem>
+                  {assignmentExtras.routes.map((r) => (
+                    <SelectItem key={r.id} value={String(r.id)}>{r.routeName}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Pickup Stop</Label>
+              <Select value={assignmentExtras.pickupStop} onValueChange={(v) => assignmentExtras.onChange({ pickupStop: v })}>
+                <SelectTrigger><SelectValue placeholder="All stops" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All stops</SelectItem>
+                  {assignmentExtras.pickupStops.map((stop) => (
+                    <SelectItem key={stop} value={stop}>{stop}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Status</Label>
+              <Select value={assignmentExtras.status} onValueChange={(v) => assignmentExtras.onChange({ status: v })}>
+                <SelectTrigger><SelectValue placeholder="All statuses" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All statuses</SelectItem>
+                  <SelectItem value="active">Active</SelectItem>
+                  <SelectItem value="inactive">Inactive</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3">
+      {searchField}
+      {otherFields}
+    </div>
+  );
+}
+
 function TransportContent({ routes, buses, assignments, students }: PageProps) {
   const { schoolId } = useCurrentSchool();
   const [tab, setTab] = useState("buses");
   const [busOpen, setBusOpen] = useState(false);
   const [routeOpen, setRouteOpen] = useState(false);
   const [assignOpen, setAssignOpen] = useState(false);
+  const [bulkAssignOpen, setBulkAssignOpen] = useState(false);
+  const [editAssignOpen, setEditAssignOpen] = useState(false);
+  const [editingAssignment, setEditingAssignment] = useState<TransportAssignment | null>(null);
 
   const [busForm, setBusForm] = useState({
     busNumber: "", plateNumber: "", capacity: "40",
@@ -117,6 +483,192 @@ function TransportContent({ routes, buses, assignments, students }: PageProps) {
     routeId: "",
     pickupStop: "", dropStop: "",
   });
+
+  const [bulkForm, setBulkForm] = useState({
+    busId: "",
+    routeId: "",
+    pickupStop: "",
+    dropStop: "",
+    showAssigned: false,
+    selectedStudentIds: [] as number[],
+    filters: { ...DEFAULT_STUDENT_FILTERS },
+  });
+
+  const [assignmentFilters, setAssignmentFilters] = useState({
+    ...DEFAULT_STUDENT_FILTERS,
+    busId: "all",
+    routeId: "all",
+    status: "all",
+    pickupStop: "all",
+  });
+
+  const [showAssignmentFilters, setShowAssignmentFilters] = useState(true);
+
+  const [editForm, setEditForm] = useState({
+    busId: "",
+    routeId: "",
+    pickupStop: "",
+    dropStop: "",
+    isActive: true,
+  });
+
+  const studentById = useMemo(() => {
+    const map = new Map<number, StudentLite>();
+    students.forEach((s) => map.set(s.id, s));
+    return map;
+  }, [students]);
+
+  const assignmentByStudentId = useMemo(() => {
+    const map = new Map<number, TransportAssignment>();
+    assignments.forEach((a) => map.set(a.studentId, a));
+    return map;
+  }, [assignments]);
+
+  const busOccupancy = useMemo(() => {
+    const map = new Map<number, number>();
+    assignments.filter((a) => a.isActive).forEach((a) => {
+      map.set(a.busId, (map.get(a.busId) ?? 0) + 1);
+    });
+    return map;
+  }, [assignments]);
+
+  const classSections = useMemo(
+    () => [...new Set(students.map((s) => s.classSection).filter(Boolean))].sort() as string[],
+    [students],
+  );
+
+  const gradeLevels = useMemo(
+    () => [...new Set(students.map((s) => s.gradeLevel).filter(Boolean))].sort() as string[],
+    [students],
+  );
+
+  const cities = useMemo(
+    () => [...new Set(students.map((s) => s.city).filter(Boolean))].sort() as string[],
+    [students],
+  );
+
+  const pickupStops = useMemo(
+    () => [...new Set(assignments.map((a) => a.pickupStop).filter(Boolean))].sort() as string[],
+    [assignments],
+  );
+
+  const bulkCandidateStudents = useMemo(() => {
+    return students.filter((student) => {
+      const existing = assignmentByStudentId.get(student.id);
+      if (!bulkForm.showAssigned && existing) {
+        return false;
+      }
+      return matchesStudentFilters(student, bulkForm.filters, existing);
+    });
+  }, [students, bulkForm.showAssigned, bulkForm.filters, assignmentByStudentId]);
+
+  const filteredAssignments = useMemo(() => {
+    return assignments.filter((assignment) => {
+      const student = studentById.get(assignment.studentId);
+
+      if (assignmentFilters.busId !== "all" && String(assignment.busId) !== assignmentFilters.busId) {
+        return false;
+      }
+      if (assignmentFilters.routeId !== "all" && String(assignment.routeId) !== assignmentFilters.routeId) {
+        return false;
+      }
+      if (assignmentFilters.status === "active" && !assignment.isActive) return false;
+      if (assignmentFilters.status === "inactive" && assignment.isActive) return false;
+      if (assignmentFilters.pickupStop !== "all" && assignment.pickupStop !== assignmentFilters.pickupStop) {
+        return false;
+      }
+
+      return matchesStudentFilters(student, assignmentFilters, assignment);
+    });
+  }, [assignments, assignmentFilters, studentById]);
+
+  const hasActiveAssignmentFilters = useMemo(() => {
+    const { busId, routeId, status, pickupStop, ...studentFilterValues } = assignmentFilters;
+    const studentFiltersActive = Object.entries(studentFilterValues).some(([key, value]) => {
+      const defaultValue = DEFAULT_STUDENT_FILTERS[key as keyof StudentFilters];
+      return value !== defaultValue;
+    });
+    return studentFiltersActive
+      || busId !== "all"
+      || routeId !== "all"
+      || status !== "all"
+      || pickupStop !== "all";
+  }, [assignmentFilters]);
+
+  const resetBulkForm = () => {
+    setBulkForm({
+      busId: "",
+      routeId: "",
+      pickupStop: "",
+      dropStop: "",
+      showAssigned: false,
+      selectedStudentIds: [],
+      filters: { ...DEFAULT_STUDENT_FILTERS },
+    });
+  };
+
+  const resetAssignmentFilters = () => {
+    setAssignmentFilters({
+      ...DEFAULT_STUDENT_FILTERS,
+      busId: "all",
+      routeId: "all",
+      status: "all",
+      pickupStop: "all",
+    });
+  };
+
+  const resetEditForm = () => {
+    setEditForm({ busId: "", routeId: "", pickupStop: "", dropStop: "", isActive: true });
+    setEditingAssignment(null);
+  };
+
+  const handleBulkBusChange = (busId: string) => {
+    const bus = buses.find((b) => String(b.id) === busId);
+    setBulkForm((prev) => ({
+      ...prev,
+      busId,
+      routeId: bus?.routeId ? String(bus.routeId) : prev.routeId,
+    }));
+  };
+
+  const handleEditBusChange = (busId: string) => {
+    const bus = buses.find((b) => String(b.id) === busId);
+    setEditForm((prev) => ({
+      ...prev,
+      busId,
+      routeId: bus?.routeId ? String(bus.routeId) : prev.routeId,
+    }));
+  };
+
+  const toggleBulkStudent = (studentId: number) => {
+    setBulkForm((prev) => ({
+      ...prev,
+      selectedStudentIds: prev.selectedStudentIds.includes(studentId)
+        ? prev.selectedStudentIds.filter((id) => id !== studentId)
+        : [...prev.selectedStudentIds, studentId],
+    }));
+  };
+
+  const toggleAllBulkStudents = () => {
+    const ids = bulkCandidateStudents.map((s) => s.id);
+    const allSelected = ids.length > 0 && ids.every((id) => bulkForm.selectedStudentIds.includes(id));
+    setBulkForm((prev) => ({
+      ...prev,
+      selectedStudentIds: allSelected ? [] : ids,
+    }));
+  };
+
+  const openEditAssignment = (assignment: TransportAssignment) => {
+    setEditingAssignment(assignment);
+    setEditForm({
+      busId: String(assignment.busId),
+      routeId: String(assignment.routeId),
+      pickupStop: assignment.pickupStop,
+      dropStop: assignment.dropStop,
+      isActive: assignment.isActive,
+    });
+    setEditAssignOpen(true);
+  };
 
   const handleCreateBus = () => {
     if (!schoolId || !busForm.busNumber || !busForm.driverName || !busForm.driverPhone) {
@@ -186,6 +738,60 @@ function TransportContent({ routes, buses, assignments, students }: PageProps) {
         setAssignForm({ studentId: "", busId: "", routeId: "", pickupStop: "", dropStop: "" });
       },
       onError: () => toast.error("Failed to assign student"),
+    });
+  };
+
+  const handleBulkAssign = () => {
+    if (!schoolId || !bulkForm.busId || !bulkForm.routeId || bulkForm.selectedStudentIds.length === 0) {
+      toast.error("Select a bus, route, and at least one student");
+      return;
+    }
+
+    router.post("/dashboard/transport/assignments/bulk", {
+      studentIds: bulkForm.selectedStudentIds,
+      busId: Number(bulkForm.busId),
+      routeId: Number(bulkForm.routeId),
+      pickupStop: bulkForm.pickupStop || undefined,
+      dropStop: bulkForm.dropStop || undefined,
+      academicYear: CURRENT_YEAR,
+    }, {
+      preserveScroll: true,
+      onSuccess: () => {
+        toast.success(`${bulkForm.selectedStudentIds.length} students assigned`);
+        setBulkAssignOpen(false);
+        resetBulkForm();
+      },
+      onError: (errors) => {
+        const message = Object.values(errors)[0];
+        toast.error(typeof message === "string" ? message : "Failed to assign students");
+      },
+    });
+  };
+
+  const handleUpdateAssignment = () => {
+    if (!editingAssignment || !editForm.busId || !editForm.routeId) {
+      toast.error("Please fill all required fields");
+      return;
+    }
+
+    router.put(`/dashboard/transport/assignments/${editingAssignment.id}`, {
+      busId: Number(editForm.busId),
+      routeId: Number(editForm.routeId),
+      pickupStop: editForm.pickupStop,
+      dropStop: editForm.dropStop,
+      isActive: editForm.isActive,
+      academicYear: CURRENT_YEAR,
+    }, {
+      preserveScroll: true,
+      onSuccess: () => {
+        toast.success("Assignment updated");
+        setEditAssignOpen(false);
+        resetEditForm();
+      },
+      onError: (errors) => {
+        const message = Object.values(errors)[0];
+        toast.error(typeof message === "string" ? message : "Failed to update assignment");
+      },
     });
   };
 
@@ -300,7 +906,7 @@ function TransportContent({ routes, buses, assignments, students }: PageProps) {
 
           <Dialog open={assignOpen} onOpenChange={setAssignOpen}>
             <DialogTrigger asChild>
-              <Button size="sm" className="cursor-pointer"><Users className="h-4 w-4 mr-1" />Assign Student</Button>
+              <Button size="sm" variant="secondary" className="cursor-pointer"><Users className="h-4 w-4 mr-1" />Assign Student</Button>
             </DialogTrigger>
             <DialogContent className="max-w-md">
               <DialogHeader><DialogTitle>Assign Student to Bus</DialogTitle></DialogHeader>
@@ -332,6 +938,159 @@ function TransportContent({ routes, buses, assignments, students }: PageProps) {
                 </div>
                 <Button className="w-full cursor-pointer" onClick={handleAssignStudent}>Assign Student</Button>
               </div>
+            </DialogContent>
+          </Dialog>
+
+          <Dialog open={bulkAssignOpen} onOpenChange={(open) => { setBulkAssignOpen(open); if (!open) resetBulkForm(); }}>
+            <DialogTrigger asChild>
+              <Button size="sm" className="cursor-pointer"><UserPlus className="h-4 w-4 mr-1" />Bulk Assign</Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+              <DialogHeader><DialogTitle>Bulk Assign Students to Bus</DialogTitle></DialogHeader>
+              <div className="space-y-4 mt-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <Label>Bus *</Label>
+                    <Select value={bulkForm.busId} onValueChange={handleBulkBusChange}>
+                      <SelectTrigger><SelectValue placeholder="Select bus" /></SelectTrigger>
+                      <SelectContent>
+                        {buses.map((b) => (
+                          <SelectItem key={b.id} value={String(b.id)}>
+                            Bus {b.busNumber} ({busOccupancy.get(b.id) ?? 0}/{b.capacity})
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label>Route *</Label>
+                    <Select value={bulkForm.routeId} onValueChange={(v) => setBulkForm({ ...bulkForm, routeId: v })}>
+                      <SelectTrigger><SelectValue placeholder="Select route" /></SelectTrigger>
+                      <SelectContent>{routes.map((r) => <SelectItem key={r.id} value={String(r.id)}>{r.routeName}</SelectItem>)}</SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div><Label>Pickup Stop</Label><Input value={bulkForm.pickupStop} onChange={(e) => setBulkForm({ ...bulkForm, pickupStop: e.target.value })} /></div>
+                  <div><Label>Drop Stop</Label><Input value={bulkForm.dropStop} onChange={(e) => setBulkForm({ ...bulkForm, dropStop: e.target.value })} /></div>
+                </div>
+                <div className="flex flex-wrap items-end gap-3">
+                  <label className="flex items-center gap-2 text-sm pb-2 cursor-pointer">
+                    <Checkbox
+                      checked={bulkForm.showAssigned}
+                      onCheckedChange={(checked) => setBulkForm({ ...bulkForm, showAssigned: checked === true, selectedStudentIds: [] })}
+                    />
+                    Include already assigned
+                  </label>
+                </div>
+                <div className="rounded-lg border p-3 space-y-3 bg-muted/10">
+                  <div className="flex items-center gap-2 text-sm font-medium">
+                    <Filter className="h-4 w-4" />
+                    Filter Students
+                  </div>
+                  <StudentFilterFields
+                    filters={bulkForm.filters}
+                    onChange={(filters) => setBulkForm({ ...bulkForm, filters, selectedStudentIds: [] })}
+                    classSections={classSections}
+                    gradeLevels={gradeLevels}
+                    cities={cities}
+                  />
+                </div>
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <Label>Students ({bulkForm.selectedStudentIds.length} selected)</Label>
+                    <Button type="button" variant="ghost" size="sm" className="cursor-pointer h-7 text-xs" onClick={toggleAllBulkStudents}>
+                      {bulkCandidateStudents.length > 0 && bulkCandidateStudents.every((s) => bulkForm.selectedStudentIds.includes(s.id))
+                        ? "Deselect all"
+                        : "Select all"}
+                    </Button>
+                  </div>
+                  <div className="max-h-56 overflow-y-auto border rounded-lg p-2 space-y-1">
+                    {bulkCandidateStudents.length === 0 ? (
+                      <p className="text-sm text-muted-foreground py-4 text-center">No students match this filter.</p>
+                    ) : (
+                      bulkCandidateStudents.map((student) => {
+                        const existing = assignmentByStudentId.get(student.id);
+                        const existingBus = existing ? buses.find((b) => b.id === existing.busId) : null;
+                        const age = getStudentAge(student.dateOfBirth);
+                        return (
+                          <label key={student.id} className="flex items-center gap-2 rounded-md px-2 py-1.5 hover:bg-muted/40 cursor-pointer">
+                            <Checkbox
+                              checked={bulkForm.selectedStudentIds.includes(student.id)}
+                              onCheckedChange={() => toggleBulkStudent(student.id)}
+                            />
+                            <div className="min-w-0 flex-1">
+                              <p className="text-sm font-medium truncate">{student.firstName} {student.lastName}</p>
+                              <p className="text-xs text-muted-foreground">
+                                {[
+                                  student.classSection,
+                                  student.gradeLevel,
+                                  student.city,
+                                  age !== null ? `Age ${age}` : null,
+                                ].filter(Boolean).join(" · ") || "No details"}
+                                {existingBus ? ` · currently Bus ${existingBus.busNumber}` : ""}
+                              </p>
+                            </div>
+                          </label>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+                <Button className="w-full cursor-pointer" onClick={handleBulkAssign}>
+                  Assign {bulkForm.selectedStudentIds.length || ""} Student{bulkForm.selectedStudentIds.length === 1 ? "" : "s"}
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
+
+          <Dialog open={editAssignOpen} onOpenChange={(open) => { setEditAssignOpen(open); if (!open) resetEditForm(); }}>
+            <DialogContent className="max-w-md">
+              <DialogHeader>
+                <DialogTitle>Edit Transport Assignment</DialogTitle>
+              </DialogHeader>
+              {editingAssignment && (
+                <div className="space-y-3 mt-2">
+                  <p className="text-sm text-muted-foreground">
+                    {(() => {
+                      const student = students.find((s) => s.id === editingAssignment.studentId);
+                      return student ? `${student.firstName} ${student.lastName}` : `Student #${editingAssignment.studentId}`;
+                    })()}
+                  </p>
+                  <div>
+                    <Label>Bus *</Label>
+                    <Select value={editForm.busId} onValueChange={handleEditBusChange}>
+                      <SelectTrigger><SelectValue placeholder="Select bus" /></SelectTrigger>
+                      <SelectContent>
+                        {buses.map((b) => (
+                          <SelectItem key={b.id} value={String(b.id)}>
+                            Bus {b.busNumber} ({busOccupancy.get(b.id) ?? 0}/{b.capacity})
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label>Route *</Label>
+                    <Select value={editForm.routeId} onValueChange={(v) => setEditForm({ ...editForm, routeId: v })}>
+                      <SelectTrigger><SelectValue placeholder="Select route" /></SelectTrigger>
+                      <SelectContent>{routes.map((r) => <SelectItem key={r.id} value={String(r.id)}>{r.routeName}</SelectItem>)}</SelectContent>
+                    </Select>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div><Label>Pickup Stop</Label><Input value={editForm.pickupStop} onChange={(e) => setEditForm({ ...editForm, pickupStop: e.target.value })} /></div>
+                    <div><Label>Drop Stop</Label><Input value={editForm.dropStop} onChange={(e) => setEditForm({ ...editForm, dropStop: e.target.value })} /></div>
+                  </div>
+                  <label className="flex items-center gap-2 text-sm cursor-pointer">
+                    <Checkbox
+                      checked={editForm.isActive}
+                      onCheckedChange={(checked) => setEditForm({ ...editForm, isActive: checked === true })}
+                    />
+                    Active assignment
+                  </label>
+                  <Button className="w-full cursor-pointer" onClick={handleUpdateAssignment}>Save Changes</Button>
+                </div>
+              )}
             </DialogContent>
           </Dialog>
         </div>
@@ -528,12 +1287,66 @@ function TransportContent({ routes, buses, assignments, students }: PageProps) {
         {/* Assignments */}
         <TabsContent value="assignments" className="mt-4">
           <Card>
-            <CardHeader><CardTitle className="text-base">Student Transport Assignments — {CURRENT_YEAR}</CardTitle></CardHeader>
+            <CardHeader className="space-y-4">
+              <div className="flex items-center justify-between gap-3 flex-wrap">
+                <CardTitle className="text-base">Student Transport Assignments — {CURRENT_YEAR}</CardTitle>
+                <div className="flex items-center gap-2">
+                  {hasActiveAssignmentFilters && (
+                    <Button variant="ghost" size="sm" className="cursor-pointer h-8" onClick={resetAssignmentFilters}>
+                      <X className="h-3.5 w-3.5 mr-1" />
+                      Clear filters
+                    </Button>
+                  )}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="cursor-pointer h-8"
+                    onClick={() => setShowAssignmentFilters((prev) => !prev)}
+                  >
+                    <Filter className="h-3.5 w-3.5 mr-1" />
+                    {showAssignmentFilters ? "Hide filters" : "Show filters"}
+                  </Button>
+                </div>
+              </div>
+              {showAssignmentFilters && (
+                <div className="rounded-lg border p-4 space-y-4 bg-muted/10">
+                  <StudentFilterFields
+                    filters={assignmentFilters}
+                    onChange={(filters) => setAssignmentFilters({ ...assignmentFilters, ...filters })}
+                    classSections={classSections}
+                    gradeLevels={gradeLevels}
+                    cities={cities}
+                    layout="columns"
+                    assignmentExtras={{
+                      busId: assignmentFilters.busId,
+                      routeId: assignmentFilters.routeId,
+                      pickupStop: assignmentFilters.pickupStop,
+                      status: assignmentFilters.status,
+                      onChange: (patch) => setAssignmentFilters({ ...assignmentFilters, ...patch }),
+                      buses,
+                      routes,
+                      pickupStops,
+                    }}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Showing {filteredAssignments.length} of {assignments.length} assignments
+                  </p>
+                </div>
+              )}
+            </CardHeader>
             <CardContent>
               {assignments.length === 0 ? (
                 <div className="text-center py-12 text-muted-foreground">
                   <Users className="h-10 w-10 mx-auto mb-3 opacity-30" />
                   <p>No student assignments yet.</p>
+                </div>
+              ) : filteredAssignments.length === 0 ? (
+                <div className="text-center py-12 text-muted-foreground">
+                  <Filter className="h-10 w-10 mx-auto mb-3 opacity-30" />
+                  <p>No assignments match your filters.</p>
+                  <Button variant="link" className="cursor-pointer mt-2" onClick={resetAssignmentFilters}>
+                    Clear filters
+                  </Button>
                 </div>
               ) : (
                 <div className="overflow-x-auto">
@@ -541,27 +1354,58 @@ function TransportContent({ routes, buses, assignments, students }: PageProps) {
                     <thead>
                       <tr className="border-b">
                         <th className="text-left py-2 pr-4 font-medium text-muted-foreground">Student</th>
+                        <th className="text-left py-2 pr-4 font-medium text-muted-foreground">Class / Age</th>
+                        <th className="text-left py-2 pr-4 font-medium text-muted-foreground">From</th>
                         <th className="text-left py-2 pr-4 font-medium text-muted-foreground">Bus</th>
                         <th className="text-left py-2 pr-4 font-medium text-muted-foreground">Route</th>
-                        <th className="text-left py-2 pr-4 font-medium text-muted-foreground">Pickup Stop</th>
+                        <th className="text-left py-2 pr-4 font-medium text-muted-foreground">Pickup</th>
+                        <th className="text-left py-2 pr-4 font-medium text-muted-foreground">Drop</th>
+                        <th className="text-left py-2 pr-4 font-medium text-muted-foreground">Status</th>
                         <th className="py-2"></th>
                       </tr>
                     </thead>
                     <tbody>
-                      {assignments.map((a) => {
-                        const student = students.find((s) => s.id === a.studentId);
+                      {filteredAssignments.map((a) => {
+                        const student = studentById.get(a.studentId);
                         const bus = buses.find((b) => b.id === a.busId);
                         const route = routes.find((r) => r.id === a.routeId);
+                        const age = getStudentAge(student?.dateOfBirth);
                         return (
                           <tr key={a.id} className="border-b last:border-0 hover:bg-muted/30">
-                            <td className="py-2 pr-4">{student ? `${student.firstName} ${student.lastName}` : a.studentId}</td>
+                            <td className="py-2 pr-4">
+                              <div>{student ? `${student.firstName} ${student.lastName}` : a.studentId}</div>
+                              {student?.studentId && (
+                                <div className="text-xs text-muted-foreground font-mono">{student.studentId}</div>
+                              )}
+                            </td>
+                            <td className="py-2 pr-4 text-muted-foreground">
+                              <div>{[student?.gradeLevel, student?.classSection].filter(Boolean).join(" · ") || "—"}</div>
+                              {age !== null && <div className="text-xs">Age {age}</div>}
+                            </td>
+                            <td className="py-2 pr-4 text-muted-foreground">
+                              <div>{student?.city || "—"}</div>
+                              {(student?.address || a.pickupStop) && (
+                                <div className="text-xs truncate max-w-[160px]">{student?.address || a.pickupStop}</div>
+                              )}
+                            </td>
                             <td className="py-2 pr-4">{bus ? `Bus ${bus.busNumber}` : "—"}</td>
                             <td className="py-2 pr-4">{route?.routeName ?? "—"}</td>
                             <td className="py-2 pr-4 text-muted-foreground">{a.pickupStop || "—"}</td>
+                            <td className="py-2 pr-4 text-muted-foreground">{a.dropStop || "—"}</td>
+                            <td className="py-2 pr-4">
+                              <Badge variant={a.isActive ? "default" : "secondary"} className="text-xs">
+                                {a.isActive ? "Active" : "Inactive"}
+                              </Badge>
+                            </td>
                             <td className="py-2">
-                              <Button variant="ghost" size="icon" className="cursor-pointer h-7 w-7 text-destructive" onClick={() => void routerDeleteWithConfirm(`/dashboard/transport/assignments/${a.id}`, { title: "Remove this assignment?", onSuccess: () => toast.success("Removed"), onError: () => toast.error("Failed to remove") })}>
-                                <Trash2 className="h-3.5 w-3.5" />
-                              </Button>
+                              <div className="flex items-center justify-end gap-1">
+                                <Button variant="ghost" size="icon" className="cursor-pointer h-7 w-7" onClick={() => openEditAssignment(a)}>
+                                  <Pencil className="h-3.5 w-3.5" />
+                                </Button>
+                                <Button variant="ghost" size="icon" className="cursor-pointer h-7 w-7 text-destructive" onClick={() => void routerDeleteWithConfirm(`/dashboard/transport/assignments/${a.id}`, { title: "Remove this assignment?", onSuccess: () => toast.success("Removed"), onError: () => toast.error("Failed to remove") })}>
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </Button>
+                              </div>
                             </td>
                           </tr>
                         );

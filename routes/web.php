@@ -26,7 +26,7 @@ $registerCentralRoutes = static function (): void {
         ->name('logout');
 
     Route::middleware('auth:platform')->prefix('dashboard')->group(function () {
-        foreach (['dashboard.php', 'landlord.php', 'admin.php', 'schools.php'] as $module) {
+        foreach (['dashboard.php', 'landlord.php', 'admin.php', 'schools.php', 'profile.php'] as $module) {
             require __DIR__.'/modules/'.$module;
         }
     });
@@ -41,3 +41,5 @@ if (app()->environment('local')) {
         ->middleware(EnsureCentralDomain::class)
         ->group($registerCentralRoutes);
 }
+
+// https://docs.daily.co/reference/rest-api/rooms/create-room

@@ -2,10 +2,12 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\CallParticipant;
 use App\Models\CallSession;
 use App\Models\Message;
 use App\Models\Notification;
 use App\Models\User;
+use App\Services\DailyService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -15,6 +17,10 @@ use Inertia\Response;
 
 class MessageController extends Controller
 {
+    public function __construct(
+        private DailyService $daily,
+    ) {}
+
     public function index(Request $request): Response
     {
         $user = Auth::user();
@@ -101,6 +107,35 @@ class MessageController extends Controller
             }
         }
 
+        $activeCall = null;
+        $joinCallId = $request->integer('joinCall') ?: null;
+
+        if ($schoolId) {
+            if ($joinCallId) {
+                $joinSession = CallSession::forSchool($schoolId)
+                    ->where('id', $joinCallId)
+                    ->where('status', '!=', 'ended')
+                    ->first();
+
+                if ($joinSession && $this->canAccessCall($joinSession, $userId)) {
+                    CallParticipant::updateOrCreate(
+                        ['call_session_id' => $joinSession->id, 'user_id' => $userId],
+                        ['status' => 'joined', 'joined_at' => now()->toIso8601String()],
+                    );
+                    $activeCall = $joinSession;
+                }
+            }
+
+            $activeCall ??= CallSession::forSchool($schoolId)
+                ->where('status', 'active')
+                ->where(function ($q) use ($userId) {
+                    $q->where('initiator_id', $userId)
+                        ->orWhereHas('participants', fn ($p) => $p->where('user_id', $userId)->whereIn('status', ['invited', 'joined']));
+                })
+                ->latest()
+                ->first();
+        }
+
         return Inertia::render('dashboard/messages/page', [
             'conversations' => $conversations,
             'threads' => $threads,
@@ -109,15 +144,15 @@ class MessageController extends Controller
             'activeWith' => $activeWith,
             'newMessagesCount' => $newMessagesCount,
             'currentUserId' => $userId,
-            'activeCall' => $schoolId ? CallSession::forSchool($schoolId)
-                ->where('status', 'active')
-                ->where(function ($q) use ($userId) {
-                    $q->where('initiator_id', $userId)
-                        ->orWhereHas('participants', fn ($p) => $p->where('user_id', $userId)->whereIn('status', ['invited', 'joined']));
-                })
-                ->latest()
-                ->first()?->toArray() : null,
+            'activeCall' => $activeCall?->toArray(),
+            'dailyCallsEnabled' => $this->daily->isConfigured(),
         ]);
+    }
+
+    private function canAccessCall(CallSession $callSession, int $userId): bool
+    {
+        return $callSession->initiator_id === $userId
+            || CallParticipant::where('call_session_id', $callSession->id)->where('user_id', $userId)->exists();
     }
 
     public function store(Request $request): RedirectResponse
@@ -150,7 +185,7 @@ class MessageController extends Controller
         ]);
 
         return redirect()
-            ->route('messages.index', ['with' => $validated['receiverId']])
+            ->to($this->tenantRoute('messages.index', ['with' => $validated['receiverId']]))
             ->with('success', 'Message sent');
     }
 
@@ -182,7 +217,7 @@ class MessageController extends Controller
         $message->delete();
 
         return redirect()
-            ->route('messages.index', ['with' => $otherId])
+            ->to($this->tenantRoute('messages.index', ['with' => $otherId]))
             ->with('success', 'Message removed');
     }
 }

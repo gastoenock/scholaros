@@ -25,6 +25,11 @@ class ExamResult extends Model
         return $this->belongsTo(Exam::class);
     }
 
+    public function student(): BelongsTo
+    {
+        return $this->belongsTo(Student::class);
+    }
+
     public function scopeForSchool($query, $schoolId)
     {
         return $query->where('school_id', $schoolId);

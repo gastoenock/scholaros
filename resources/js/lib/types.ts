@@ -7,6 +7,7 @@ export type AuthUser = {
   schoolId?: number | null;
   avatar?: string | null;
   phone?: string | null;
+  preferences?: Record<string, string | number | boolean | null>;
 };
 
 export type PlatformTenant = {
@@ -34,6 +35,7 @@ export type SharedPageProps = {
     tenantName: string | null;
   };
   flash: { success?: string | null; error?: string | null };
+  academicCalendar?: import("@/lib/academic-calendar.ts").AcademicCalendar | null;
 };
 
 export type Branch = {

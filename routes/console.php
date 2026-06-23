@@ -6,6 +6,12 @@ use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
 use App\Support\TenantDatabaseCleaner;
 
+Artisan::command('tenants:refresh', function () {
+    $this->call('tenants:migrate-fresh');
+    $this->call('tenants:seed', ['--force' => true]);
+    $this->info('Tenant database refreshed and seeded.');
+})->purpose('Drop, migrate, and seed all tenant databases');
+
 Artisan::command('tenancy:drop-databases', function () {
     $count = TenantDatabaseCleaner::dropAll();
     $this->info("Dropped {$count} tenant database(s).");

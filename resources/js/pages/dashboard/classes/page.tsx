@@ -1,7 +1,9 @@
 import { useState } from "react";
-import { router } from "@inertiajs/react";
+import { router, usePage } from "@inertiajs/react";
 import { DashboardLayout } from "../_components/layout.tsx";
 import { useCurrentSchool } from "../_components/use-current-school.ts";
+import { AcademicYearField } from "@/components/academic-calendar-fields.tsx";
+import { defaultYearId, type SharedWithCalendar } from "@/lib/academic-calendar.ts";
 import { Button } from "@/components/ui/button.tsx";
 import { Card, CardContent } from "@/components/ui/card.tsx";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog.tsx";
@@ -27,6 +29,7 @@ export type SchoolClass = {
   classTeacherId?: number | null;
   room?: string | null;
   academicYear: string;
+  academicYearId?: number | null;
   capacity?: number | null;
   createdAt: string;
 };
@@ -36,20 +39,21 @@ type ClassForm = {
   gradeLevel: string;
   section: string;
   room: string;
-  academicYear: string;
+  academicYearId: number | null;
   capacity: string;
 };
 
-const EMPTY: ClassForm = { name: "", gradeLevel: "", section: "", room: "", academicYear: "2024-2025", capacity: "" };
+const EMPTY: ClassForm = { name: "", gradeLevel: "", section: "", room: "", academicYearId: null, capacity: "" };
 
 function ClassesContent({ classes, staff, students }: PageProps) {
   const { schoolId } = useCurrentSchool();
+  const { academicCalendar } = usePage<SharedWithCalendar>().props;
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<SchoolClass | null>(null);
   const [form, setForm] = useState<ClassForm>(EMPTY);
   const [saving, setSaving] = useState(false);
 
-  const openAdd = () => { setEditing(null); setForm(EMPTY); setOpen(true); };
+  const openAdd = () => { setEditing(null); setForm({ ...EMPTY, academicYearId: defaultYearId(academicCalendar) }); setOpen(true); };
   const openEdit = (c: SchoolClass) => {
     setEditing(c);
     setForm({
@@ -57,7 +61,7 @@ function ClassesContent({ classes, staff, students }: PageProps) {
       gradeLevel: c.gradeLevel,
       section: c.section ?? "",
       room: c.room ?? "",
-      academicYear: c.academicYear,
+      academicYearId: c.academicYearId ?? defaultYearId(academicCalendar),
       capacity: c.capacity?.toString() ?? "",
     });
     setOpen(true);
@@ -71,7 +75,7 @@ function ClassesContent({ classes, staff, students }: PageProps) {
       gradeLevel: form.gradeLevel,
       section: form.section || undefined,
       room: form.room || undefined,
-      academicYear: form.academicYear,
+      academicYearId: form.academicYearId ?? undefined,
       capacity: form.capacity ? parseInt(form.capacity) : undefined,
     };
     const options = {
@@ -209,10 +213,12 @@ function ClassesContent({ classes, staff, students }: PageProps) {
               </div>
             </div>
             <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label>Academic Year</Label>
-                <Input value={form.academicYear} onChange={(e) => setForm((p) => ({ ...p, academicYear: e.target.value }))} placeholder="2024-2025" />
-              </div>
+              <AcademicYearField
+                calendar={academicCalendar}
+                value={form.academicYearId}
+                onChange={(academicYearId) => setForm((p) => ({ ...p, academicYearId }))}
+                required
+              />
               <div className="space-y-1.5">
                 <Label>Capacity</Label>
                 <Input type="number" value={form.capacity} onChange={(e) => setForm((p) => ({ ...p, capacity: e.target.value }))} placeholder="e.g. 30" />

@@ -8,6 +8,7 @@ use App\Models\FeePayment;
 use App\Models\SchoolBranch;
 use App\Models\Student;
 use App\Models\TransportAssignment;
+use App\Services\StudentFeeBalanceService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -15,6 +16,10 @@ use Inertia\Response;
 
 class StudentController extends Controller
 {
+    public function __construct(
+        private StudentFeeBalanceService $feeBalances,
+    ) {}
+
     public function index(): Response
     {
         $schoolId = $this->requireTenancy();
@@ -79,12 +84,22 @@ class StudentController extends Controller
 
         $branches = SchoolBranch::forSchool($student->school_id)->orderBy('name')->get();
 
+        $academicYear = $student->academic_year
+            ?? sprintf('%d-%d', now()->year, now()->year + 1);
+
+        $feeBalance = $this->feeBalances->currentBalance(
+            $student->school_id,
+            $student,
+            $academicYear,
+        );
+
         return Inertia::render('dashboard/students/show', [
             'student' => $student,
             'branches' => $branches,
             'attendanceRecords' => $attendanceRecords,
             'attendanceSummary' => $attendanceSummary,
             'feePayments' => $feePayments,
+            'feeBalance' => $feeBalance,
             'examResults' => $examResults,
             'transport' => $transport,
         ]);
@@ -107,7 +122,7 @@ class StudentController extends Controller
             'gradeLevel' => ['nullable', 'string'],
             'classSection' => ['nullable', 'string'],
             'enrollmentDate' => ['nullable', 'string'],
-            'academicYear' => ['nullable', 'string'],
+            ...$this->academicYearRules(),
             'address' => ['nullable', 'string'],
             'city' => ['nullable', 'string'],
             'state' => ['nullable', 'string'],
@@ -128,6 +143,7 @@ class StudentController extends Controller
 
         Student::create([
             ...$this->snakeKeys($validated),
+            ...$this->academicCalendar()->applyYear($schoolId, $validated),
             'school_id' => $schoolId,
             'student_id' => sprintf('STU-%04d', $count + 1),
             'status' => 'active',
@@ -152,7 +168,7 @@ class StudentController extends Controller
             'gradeLevel' => ['nullable', 'string'],
             'classSection' => ['nullable', 'string'],
             'enrollmentDate' => ['nullable', 'string'],
-            'academicYear' => ['nullable', 'string'],
+            ...$this->academicYearRules(),
             'address' => ['nullable', 'string'],
             'city' => ['nullable', 'string'],
             'state' => ['nullable', 'string'],
@@ -170,7 +186,12 @@ class StudentController extends Controller
             'guardians.*.isEmergencyContact' => ['boolean'],
         ]);
 
-        $student->update($this->snakeKeys($validated));
+        $payload = $this->snakeKeys($validated);
+        if (isset($validated['academicYearId']) || isset($validated['academicYear'])) {
+            $payload = [...$payload, ...$this->academicCalendar()->applyYear($student->school_id, $validated)];
+        }
+
+        $student->update($payload);
 
         return back()->with('success', 'Student updated!');
     }
@@ -181,6 +202,8 @@ class StudentController extends Controller
 
         $student->delete();
 
-        return redirect()->route('students.index')->with('success', 'Student removed');
+        return redirect()
+            ->to($this->tenantRoute('students.index'))
+            ->with('success', 'Student removed');
     }
 }

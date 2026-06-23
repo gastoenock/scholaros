@@ -1,9 +1,12 @@
 <?php
 
 use App\Http\Controllers\AcademicsController;
+use App\Http\Controllers\AcademicReportController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/academics', [AcademicsController::class, 'index'])->name('academics.index');
+Route::get('/academics/reports', [AcademicReportController::class, 'index'])->name('academics.reports.index');
+Route::get('/academics/reports/export', [AcademicReportController::class, 'export'])->name('academics.reports.export');
 
 Route::post('/academics/subjects', [AcademicsController::class, 'storeSubject'])->name('academics.subjects.store');
 Route::put('/academics/subjects/{subject}', [AcademicsController::class, 'updateSubject'])->name('academics.subjects.update');

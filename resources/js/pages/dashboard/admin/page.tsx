@@ -1,10 +1,10 @@
-import { router, usePage } from "@inertiajs/react";
+import { router, usePage, Link } from "@inertiajs/react";
 import { DashboardLayout } from "../_components/layout.tsx";
 import { Card, CardContent } from "@/components/ui/card.tsx";
 import { Button } from "@/components/ui/button.tsx";
 import { Badge } from "@/components/ui/badge.tsx";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select.tsx";
-import { CheckCircle, XCircle, Clock, Building2, User, Mail, Phone, MapPin } from "lucide-react";
+import { CheckCircle, XCircle, Clock, Building2, User, Mail, Phone, MapPin, Cog } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import type { SharedPageProps } from "@/lib/types.ts";
@@ -150,9 +150,17 @@ function AdminContent({ applications, users }: PageProps) {
 
   return (
     <div className="space-y-8">
-      <div>
-        <h1 className="text-2xl font-extrabold">Admin Panel</h1>
-        <p className="text-muted-foreground">Review applications and manage user roles</p>
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <h1 className="text-2xl font-extrabold">Admin Panel</h1>
+          <p className="text-muted-foreground">Review applications and manage user roles</p>
+        </div>
+        <Link href="/dashboard/admin/settings">
+          <Button variant="outline" size="sm" className="cursor-pointer">
+            <Cog className="h-4 w-4 mr-2" />
+            System Settings
+          </Button>
+        </Link>
       </div>
 
       <div>

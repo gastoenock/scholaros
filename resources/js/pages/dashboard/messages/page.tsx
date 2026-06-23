@@ -18,6 +18,7 @@ import {
   Phone, Search, Send, Smile, Star, Trash2, Users, Video, VideoOff, X,
 } from "lucide-react";
 import { format, isToday, isYesterday } from "date-fns";
+import { DailyCallOverlay } from "@/components/daily-call-overlay.tsx";
 
 const FAVORITES_KEY = "scholaros:message-favorites";
 
@@ -69,6 +70,7 @@ type PageProps = {
   newMessagesCount: number;
   currentUserId: number;
   activeCall: CallSession | null;
+  dailyCallsEnabled: boolean;
 };
 
 type CallSession = {
@@ -77,6 +79,8 @@ type CallSession = {
   initiatorId: number;
   callType: "audio" | "video" | "conference";
   roomCode: string;
+  dailyRoomName?: string | null;
+  dailyRoomUrl?: string | null;
   title?: string | null;
   status: string;
   startedAt?: string | null;
@@ -199,6 +203,10 @@ function CallOverlay({
   partnerName?: string;
   onEnd: () => void;
 }) {
+  if (call.dailyRoomUrl) {
+    return <DailyCallOverlay call={call} partnerName={partnerName} onEnd={onEnd} />;
+  }
+
   const label = call.callType === "conference" ? "Conference call" : call.callType === "video" ? "Video call" : "Audio call";
 
   return (
@@ -210,7 +218,7 @@ function CallOverlay({
       <p className="text-blue-200 text-sm mt-1">{label}</p>
       <p className="text-blue-300 text-xs mt-2 font-mono">Room: {call.roomCode}</p>
       <p className="text-blue-200/80 text-xs mt-6 text-center max-w-sm">
-        WebRTC signaling is not configured. This session logs the call for your records.
+        Daily.co is not configured for this call session. Add DAILY_API_KEY to enable live audio and video.
       </p>
       <Button
         type="button"
@@ -738,6 +746,7 @@ function MessagesInner({
   activeWith,
   newMessagesCount,
   activeCall: initialActiveCall,
+  dailyCallsEnabled,
 }: PageProps) {
   const { favorites, toggleFavorite, isFavorite } = useFavorites();
   const [mobileShowChat, setMobileShowChat] = useState(!!activeWith);
@@ -797,6 +806,11 @@ function MessagesInner({
   };
 
   const startCall = (type: "audio" | "video" | "conference", participantIds: number[]) => {
+    if (!dailyCallsEnabled) {
+      toast.error("Video calling is not configured. Add DAILY_API_KEY to your .env file.");
+      return;
+    }
+
     router.post("/dashboard/calls", {
       callType: type,
       participantIds,
@@ -804,7 +818,10 @@ function MessagesInner({
     }, {
       preserveScroll: true,
       onSuccess: () => toast.success(`${type === "conference" ? "Conference" : type === "video" ? "Video" : "Audio"} call started`),
-      onError: () => toast.error("Could not start call"),
+      onError: (errors) => {
+        const message = Object.values(errors)[0];
+        toast.error(typeof message === "string" ? message : "Could not start call");
+      },
     });
   };
 

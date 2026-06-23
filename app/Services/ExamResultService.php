@@ -6,12 +6,11 @@ use App\Models\Exam;
 use App\Models\ExamResult;
 use App\Models\SchoolClass;
 use App\Models\Student;
-// use App\Support\SimpleXlsx;
+use App\Support\SimpleXlsx;
 use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Collection;
 use Illuminate\Validation\ValidationException;
-use Shuchkin\SimpleXLSX;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class ExamResultService
@@ -86,7 +85,7 @@ class ExamResultService
         $filename = str($exam->title)->slug().'-results-template.xlsx';
 
         return response()->streamDownload(function () use ($rows) {
-            echo SimpleXLSX::write($rows);
+            echo SimpleXlsx::write($rows);
         }, $filename, [
             'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         ]);
@@ -113,8 +112,7 @@ class ExamResultService
      */
     public function importSpreadsheet(Exam $exam, UploadedFile $file): array
     {
-        $xlsx = SimpleXLSX::parseFile($file);
-        $rows = $xlsx->rows();
+        $rows = SimpleXlsx::read($file->getRealPath());
 
         if ($rows === []) {
             throw ValidationException::withMessages([

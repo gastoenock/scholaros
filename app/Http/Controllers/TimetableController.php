@@ -41,11 +41,14 @@ class TimetableController extends Controller
             'room' => ['nullable', 'string'],
             'startTime' => ['required', 'string'],
             'endTime' => ['required', 'string'],
-            'academicYear' => ['required', 'string'],
+            ...$this->academicYearRules(),
+            ...$this->academicSemesterRules(),
+            ...$this->academicTermRules(),
         ]);
 
         TimetableSlot::create([
             ...$this->snakeKeys($validated),
+            ...$this->academicCalendar()->applyCalendar($schoolId, $validated, false, ['academic_year']),
             'school_id' => $schoolId,
         ]);
 

@@ -33,6 +33,7 @@ type PageProps = {
 const TYPE_STYLES: Record<string, { color: string; label: string }> = {
   attendance: { color: "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300", label: "Attendance" },
   message: { color: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300", label: "Message" },
+  call: { color: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300", label: "Call" },
   announcement: { color: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300", label: "Announcement" },
   general: { color: "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300", label: "General" },
 };
@@ -50,6 +51,14 @@ function NotificationsInner({ notifications }: PageProps) {
 
   const markRead = (notificationId: number) => {
     router.post(`/dashboard/notifications/${notificationId}/read`, {}, { preserveScroll: true });
+  };
+
+  const openNotification = (notification: Notification) => {
+    if (!notification.isRead) markRead(notification.id);
+
+    if (notification.type === "call" && notification.relatedId) {
+      router.get("/dashboard/messages", { joinCall: notification.relatedId });
+    }
   };
 
   const handleMarkAll = () => {
@@ -126,7 +135,7 @@ function NotificationsInner({ notifications }: PageProps) {
               >
                 <Card
                   className={`cursor-pointer transition-all hover:shadow-md ${!n.isRead ? "border-primary/30 bg-primary/5" : ""}`}
-                  onClick={() => { if (!n.isRead) markRead(n.id); }}
+                  onClick={() => openNotification(n)}
                 >
                   <CardContent className="p-4">
                     <div className="flex items-start gap-3">

@@ -1,7 +1,9 @@
 import { useMemo, useRef, useState } from "react";
-import { router } from "@inertiajs/react";
+import { router, usePage } from "@inertiajs/react";
 import { DashboardLayout } from "../_components/layout.tsx";
 import { useCurrentSchool } from "../_components/use-current-school.ts";
+import { AcademicSemesterField, AcademicTermField, AcademicYearField } from "@/components/academic-calendar-fields.tsx";
+import { defaultSemesterId, defaultTermId, defaultYearId, type SharedWithCalendar } from "@/lib/academic-calendar.ts";
 import { Button } from "@/components/ui/button.tsx";
 import { Badge } from "@/components/ui/badge.tsx";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card.tsx";
@@ -66,10 +68,15 @@ type PageProps = {
 };
 
 function SubjectsTab({ subjects, staff }: Pick<PageProps, "subjects" | "staff">) {
+  const { academicCalendar } = usePage<SharedWithCalendar>().props;
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Subject | null>(null);
   const [form, setForm] = useState({ name: "", code: "", gradeLevel: "", description: "" });
   const [teacherId, setTeacherId] = useState("");
+  const [academicYearId, setAcademicYearId] = useState<number | null>(() => defaultYearId(academicCalendar));
+  const [academicSemesterId, setAcademicSemesterId] = useState<number | null>(() =>
+    defaultSemesterId(academicCalendar, defaultYearId(academicCalendar)),
+  );
 
   const handleSave = () => {
     const payload = {
@@ -78,6 +85,8 @@ function SubjectsTab({ subjects, staff }: Pick<PageProps, "subjects" | "staff">)
       gradeLevel: form.gradeLevel || undefined,
       description: form.description || undefined,
       teacherId: teacherId && teacherId !== "none" ? parseInt(teacherId, 10) : null,
+      academicYearId: academicYearId ?? undefined,
+      academicSemesterId: academicSemesterId ?? undefined,
     };
     const options = {
       preserveScroll: true,
@@ -108,7 +117,14 @@ function SubjectsTab({ subjects, staff }: Pick<PageProps, "subjects" | "staff">)
   return (
     <div className="space-y-4">
       <div className="flex justify-end">
-        <Button size="sm" onClick={() => { setEditing(null); setForm({ name: "", code: "", gradeLevel: "", description: "" }); setTeacherId(""); setOpen(true); }} className="cursor-pointer">
+        <Button size="sm" onClick={() => {
+          setEditing(null);
+          setForm({ name: "", code: "", gradeLevel: "", description: "" });
+          setTeacherId("");
+          setAcademicYearId(defaultYearId(academicCalendar));
+          setAcademicSemesterId(defaultSemesterId(academicCalendar, defaultYearId(academicCalendar)));
+          setOpen(true);
+        }} className="cursor-pointer">
           <Plus className="h-4 w-4 mr-1.5" />Add Subject
         </Button>
       </div>
@@ -162,6 +178,22 @@ function SubjectsTab({ subjects, staff }: Pick<PageProps, "subjects" | "staff">)
               </Select>
             </div>
             <div className="space-y-1.5"><Label>Description</Label><Textarea value={form.description} onChange={(e) => setForm((p) => ({ ...p, description: e.target.value }))} className="min-h-[80px]" /></div>
+            <div className="grid grid-cols-2 gap-3">
+              <AcademicYearField
+                calendar={academicCalendar}
+                value={academicYearId}
+                onChange={(yearId) => {
+                  setAcademicYearId(yearId);
+                  setAcademicSemesterId(defaultSemesterId(academicCalendar, yearId));
+                }}
+              />
+              <AcademicSemesterField
+                calendar={academicCalendar}
+                yearId={academicYearId}
+                value={academicSemesterId}
+                onChange={setAcademicSemesterId}
+              />
+            </div>
           </div>
           <DialogFooter>
             <Button variant="secondary" onClick={() => setOpen(false)} className="cursor-pointer">Cancel</Button>
@@ -329,11 +361,29 @@ function AssignmentsTab({ assignments, classes, subjects, staff, submissions }: 
 }
 
 function ExamsTab({ exams, classes, subjects, students, examResults, canUploadExamResults }: Pick<PageProps, "exams" | "classes" | "subjects" | "students" | "examResults" | "canUploadExamResults">) {
+  const { academicCalendar } = usePage<SharedWithCalendar>().props;
   const [open, setOpen] = useState(false);
   const [resultsOpen, setResultsOpen] = useState(false);
   const [resultsTab, setResultsTab] = useState<"manual" | "single" | "bulk">("manual");
   const [selectedExam, setSelectedExam] = useState<Exam | null>(null);
-  const [form, setForm] = useState({ classId: "", subjectId: "", title: "", examDate: "", startTime: "", endTime: "", maxScore: "100", passingScore: "50", term: "Term 1", academicYear: "2024-2025", venue: "" });
+  const [form, setForm] = useState({
+    classId: "",
+    subjectId: "",
+    title: "",
+    examDate: "",
+    startTime: "",
+    endTime: "",
+    maxScore: "100",
+    passingScore: "50",
+    venue: "",
+  });
+  const [academicYearId, setAcademicYearId] = useState<number | null>(() => defaultYearId(academicCalendar));
+  const [academicSemesterId, setAcademicSemesterId] = useState<number | null>(() =>
+    defaultSemesterId(academicCalendar, defaultYearId(academicCalendar)),
+  );
+  const [academicTermId, setAcademicTermId] = useState<number | null>(() =>
+    defaultTermId(academicCalendar, defaultYearId(academicCalendar), defaultSemesterId(academicCalendar, defaultYearId(academicCalendar))),
+  );
   const [resultScores, setResultScores] = useState<Record<string, string>>({});
   const [resultRemarks, setResultRemarks] = useState<Record<string, string>>({});
   const [singleForm, setSingleForm] = useState({ studentId: "", score: "", grade: "", remarks: "" });
@@ -427,8 +477,9 @@ function ExamsTab({ exams, classes, subjects, students, examResults, canUploadEx
       endTime: form.endTime || undefined,
       maxScore: parseInt(form.maxScore, 10) || 100,
       passingScore: parseInt(form.passingScore, 10) || undefined,
-      term: form.term || undefined,
-      academicYear: form.academicYear,
+      academicYearId: academicYearId ?? undefined,
+      academicSemesterId: academicSemesterId ?? undefined,
+      academicTermId: academicTermId ?? undefined,
       venue: form.venue || undefined,
     }, { preserveScroll: true, onSuccess: () => { toast.success("Exam created"); setOpen(false); }, onError: () => toast.error("Failed to create exam") });
   };
@@ -601,6 +652,37 @@ function ExamsTab({ exams, classes, subjects, students, examResults, canUploadEx
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5"><Label>Max Score</Label><Input type="number" value={form.maxScore} onChange={(e) => setForm((p) => ({ ...p, maxScore: e.target.value }))} /></div>
               <div className="space-y-1.5"><Label>Passing Score</Label><Input type="number" value={form.passingScore} onChange={(e) => setForm((p) => ({ ...p, passingScore: e.target.value }))} /></div>
+            </div>
+            <div className="grid grid-cols-3 gap-3">
+              <AcademicYearField
+                calendar={academicCalendar}
+                value={academicYearId}
+                onChange={(yearId) => {
+                  setAcademicYearId(yearId);
+                  const semId = defaultSemesterId(academicCalendar, yearId);
+                  setAcademicSemesterId(semId);
+                  setAcademicTermId(defaultTermId(academicCalendar, yearId, semId));
+                }}
+                required
+              />
+              <AcademicSemesterField
+                calendar={academicCalendar}
+                yearId={academicYearId}
+                value={academicSemesterId}
+                onChange={(semId) => {
+                  setAcademicSemesterId(semId);
+                  setAcademicTermId(defaultTermId(academicCalendar, academicYearId, semId));
+                }}
+                required
+              />
+              <AcademicTermField
+                calendar={academicCalendar}
+                yearId={academicYearId}
+                semesterId={academicSemesterId}
+                value={academicTermId}
+                onChange={setAcademicTermId}
+                required
+              />
             </div>
           </div>
           <DialogFooter>

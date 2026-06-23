@@ -8,6 +8,7 @@ use App\Models\Student;
 use App\Models\TransportAssignment;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -24,7 +25,10 @@ class TransportController extends Controller
             ? TransportAssignment::forSchool($schoolId)->where('academic_year', $academicYear)->get()
             : collect();
         $students = $schoolId
-            ? Student::forSchool($schoolId)->orderBy('last_name')->get(['id', 'first_name', 'last_name'])
+            ? Student::forSchool($schoolId)->orderBy('last_name')->get([
+                'id', 'first_name', 'last_name', 'student_id', 'class_section', 'grade_level',
+                'date_of_birth', 'city', 'address', 'gender',
+            ])
             : collect();
 
         return Inertia::render('dashboard/transport/page', [
@@ -154,15 +158,82 @@ class TransportController extends Controller
             'academicYear' => ['required', 'string', 'max:255'],
         ]);
 
-        TransportAssignment::create([
-            ...$this->snakeKeys($validated),
-            'pickup_stop' => $validated['pickupStop'] ?? '',
-            'drop_stop' => $validated['dropStop'] ?? '',
-            'school_id' => $schoolId,
-            'is_active' => true,
-        ]);
+        $this->upsertAssignment($schoolId, $validated);
 
         return back()->with('success', 'Student assigned');
+    }
+
+    public function bulkStoreAssignments(Request $request): RedirectResponse
+    {
+        $schoolId = $this->schoolId();
+        abort_unless($schoolId, 403);
+
+        $validated = $request->validate([
+            'studentIds' => ['required', 'array', 'min:1'],
+            'studentIds.*' => ['integer', 'exists:students,id'],
+            'busId' => ['required', 'integer', 'exists:buses,id'],
+            'routeId' => ['required', 'integer', 'exists:bus_routes,id'],
+            'pickupStop' => ['nullable', 'string', 'max:255'],
+            'dropStop' => ['nullable', 'string', 'max:255'],
+            'academicYear' => ['required', 'string', 'max:255'],
+        ]);
+
+        $this->assertTransportResourcesBelongToSchool($schoolId, $validated);
+
+        $bus = Bus::forSchool($schoolId)->findOrFail($validated['busId']);
+        $this->assertBusCapacity($schoolId, $bus, $validated['studentIds'], $validated['academicYear']);
+
+        foreach ($validated['studentIds'] as $studentId) {
+            $this->upsertAssignment($schoolId, [
+                ...$validated,
+                'studentId' => $studentId,
+            ]);
+        }
+
+        $count = count($validated['studentIds']);
+
+        return back()->with('success', "{$count} student".($count === 1 ? '' : 's').' assigned');
+    }
+
+    public function updateAssignment(Request $request, TransportAssignment $transportAssignment): RedirectResponse
+    {
+        $schoolId = $this->schoolId();
+        abort_unless($schoolId && $transportAssignment->school_id === $schoolId, 403);
+
+        $validated = $request->validate([
+            'busId' => ['required', 'integer', 'exists:buses,id'],
+            'routeId' => ['required', 'integer', 'exists:bus_routes,id'],
+            'pickupStop' => ['nullable', 'string', 'max:255'],
+            'dropStop' => ['nullable', 'string', 'max:255'],
+            'isActive' => ['nullable', 'boolean'],
+            'academicYear' => ['nullable', 'string', 'max:255'],
+        ]);
+
+        $this->assertTransportResourcesBelongToSchool($schoolId, $validated);
+
+        $bus = Bus::forSchool($schoolId)->findOrFail($validated['busId']);
+        $academicYear = $validated['academicYear'] ?? $transportAssignment->academic_year;
+
+        if ((int) $validated['busId'] !== (int) $transportAssignment->bus_id) {
+            $this->assertBusCapacity(
+                $schoolId,
+                $bus,
+                [$transportAssignment->student_id],
+                $academicYear,
+                excludeAssignmentId: $transportAssignment->id,
+            );
+        }
+
+        $transportAssignment->update([
+            'bus_id' => $validated['busId'],
+            'route_id' => $validated['routeId'],
+            'pickup_stop' => $validated['pickupStop'] ?? '',
+            'drop_stop' => $validated['dropStop'] ?? '',
+            'is_active' => $validated['isActive'] ?? $transportAssignment->is_active,
+            'academic_year' => $academicYear,
+        ]);
+
+        return back()->with('success', 'Assignment updated');
     }
 
     public function destroyAssignment(TransportAssignment $transportAssignment): RedirectResponse
@@ -172,5 +243,84 @@ class TransportController extends Controller
         $transportAssignment->delete();
 
         return back()->with('success', 'Assignment removed');
+    }
+
+    /**
+     * @param  array<string, mixed>  $validated
+     */
+    private function upsertAssignment(int $schoolId, array $validated): TransportAssignment
+    {
+        $this->assertTransportResourcesBelongToSchool($schoolId, $validated);
+
+        $bus = Bus::forSchool($schoolId)->findOrFail($validated['busId']);
+        $this->assertBusCapacity(
+            $schoolId,
+            $bus,
+            [(int) $validated['studentId']],
+            $validated['academicYear'],
+        );
+
+        return TransportAssignment::updateOrCreate(
+            [
+                'school_id' => $schoolId,
+                'student_id' => $validated['studentId'],
+                'academic_year' => $validated['academicYear'],
+            ],
+            [
+                'bus_id' => $validated['busId'],
+                'route_id' => $validated['routeId'],
+                'pickup_stop' => $validated['pickupStop'] ?? '',
+                'drop_stop' => $validated['dropStop'] ?? '',
+                'is_active' => true,
+            ],
+        );
+    }
+
+    /**
+     * @param  array<string, mixed>  $validated
+     */
+    private function assertTransportResourcesBelongToSchool(int $schoolId, array $validated): void
+    {
+        Bus::forSchool($schoolId)->findOrFail($validated['busId']);
+        BusRoute::forSchool($schoolId)->findOrFail($validated['routeId']);
+
+        if (isset($validated['studentId'])) {
+            Student::forSchool($schoolId)->findOrFail($validated['studentId']);
+        }
+
+        if (isset($validated['studentIds'])) {
+            $count = Student::forSchool($schoolId)->whereIn('id', $validated['studentIds'])->count();
+            abort_unless($count === count($validated['studentIds']), 403);
+        }
+    }
+
+    /**
+     * @param  array<int>  $studentIds
+     */
+    private function assertBusCapacity(
+        int $schoolId,
+        Bus $bus,
+        array $studentIds,
+        string $academicYear,
+        ?int $excludeAssignmentId = null,
+    ): void {
+        $query = TransportAssignment::forSchool($schoolId)
+            ->where('bus_id', $bus->id)
+            ->where('academic_year', $academicYear)
+            ->where('is_active', true);
+
+        if ($excludeAssignmentId) {
+            $query->where('id', '!=', $excludeAssignmentId);
+        }
+
+        $alreadyOnBus = (clone $query)->whereIn('student_id', $studentIds)->pluck('student_id');
+        $incomingNew = collect($studentIds)->diff($alreadyOnBus)->count();
+        $currentOnBus = $query->count();
+
+        if ($currentOnBus + $incomingNew > $bus->capacity) {
+            throw ValidationException::withMessages([
+                'capacity' => "Bus {$bus->bus_number} has capacity {$bus->capacity}. Cannot assign {$incomingNew} more student(s).",
+            ]);
+        }
     }
 }

@@ -36,6 +36,19 @@ type FeePayment = {
   paidFor: string;
   receiptNumber: string;
   status: string;
+  feesDue?: number | null;
+  paidTotalBefore?: number | null;
+  paidTotalAfter?: number | null;
+  balanceBefore?: number | null;
+  balanceAfter?: number | null;
+};
+
+type FeeBalance = {
+  feesDue: number;
+  totalPaid: number;
+  balanceDue: number;
+  feeStructureId?: number | null;
+  feeStructureName?: string | null;
 };
 
 type ExamResult = {
@@ -60,6 +73,7 @@ type PageProps = {
   attendanceRecords: AttendanceRecord[];
   attendanceSummary: AttendanceSummary;
   feePayments: FeePayment[];
+  feeBalance: FeeBalance;
   examResults: ExamResult[];
   transport: TransportAssignment | null;
 };
@@ -87,6 +101,7 @@ function StudentShowContent({
   attendanceRecords,
   attendanceSummary,
   feePayments,
+  feeBalance,
   examResults,
   transport,
 }: PageProps) {
@@ -227,8 +242,9 @@ function StudentShowContent({
         </Card>
         <Card>
           <CardContent className="p-4">
-            <p className="text-xs text-muted-foreground">Fee Payments</p>
-            <p className="text-2xl font-bold text-blue-600">{feePayments.length}</p>
+            <p className="text-xs text-muted-foreground">Fees Due</p>
+            <p className="text-2xl font-bold text-amber-600">GHS {feeBalance.balanceDue.toLocaleString()}</p>
+            <p className="text-xs text-muted-foreground">Paid: GHS {feeBalance.totalPaid.toLocaleString()} / GHS {feeBalance.feesDue.toLocaleString()}</p>
           </CardContent>
         </Card>
       </div>
@@ -260,12 +276,20 @@ function StudentShowContent({
             ) : (
               <div className="space-y-2">
                 {feePayments.map((p) => (
-                  <div key={p.id} className="flex items-center justify-between text-sm border-b pb-2 last:border-0">
-                    <div>
-                      <p className="font-medium">GHS {p.amount.toLocaleString()}</p>
-                      <p className="text-xs text-muted-foreground">{p.paidFor}</p>
+                  <div key={p.id} className="border-b pb-2 last:border-0 space-y-1">
+                    <div className="flex items-center justify-between text-sm">
+                      <div>
+                        <p className="font-medium">GHS {p.amount.toLocaleString()}</p>
+                        <p className="text-xs text-muted-foreground">{p.paidFor}</p>
+                      </div>
+                      <span className="text-xs text-muted-foreground">{format(new Date(p.paymentDate), "MMM d, yyyy")}</span>
                     </div>
-                    <span className="text-xs text-muted-foreground">{format(new Date(p.paymentDate), "MMM d, yyyy")}</span>
+                    {(p.balanceBefore != null || p.balanceAfter != null) && (
+                      <p className="text-xs text-muted-foreground">
+                        Due: GHS {(p.balanceBefore ?? 0).toLocaleString()} → GHS {(p.balanceAfter ?? 0).toLocaleString()}
+                        {p.paidTotalAfter != null ? ` · Paid total: GHS ${p.paidTotalAfter.toLocaleString()}` : ""}
+                      </p>
+                    )}
                   </div>
                 ))}
               </div>

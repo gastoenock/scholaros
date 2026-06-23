@@ -40,6 +40,16 @@ class Student extends Model
         return $this->belongsTo(SchoolBranch::class, 'school_branch_id');
     }
 
+    public function academicYear(): BelongsTo
+    {
+        return $this->belongsTo(AcademicYear::class);
+    }
+
+    public function examResults(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(ExamResult::class);
+    }
+
     public function scopeForSchool($query, $schoolId)
     {
         return $query->where('school_id', $schoolId);

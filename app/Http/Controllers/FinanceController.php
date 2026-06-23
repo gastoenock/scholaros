@@ -8,6 +8,8 @@ use App\Models\FeeStructure;
 use App\Models\PettyCashFund;
 use App\Models\Student;
 use App\Services\AccountingService;
+use App\Services\StudentFeeBalanceService;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -15,7 +17,10 @@ use Inertia\Response;
 
 class FinanceController extends Controller
 {
-    public function __construct(private AccountingService $accounting) {}
+    public function __construct(
+        private AccountingService $accounting,
+        private StudentFeeBalanceService $feeBalances,
+    ) {}
 
     public function index(Request $request): Response
     {
@@ -67,7 +72,7 @@ class FinanceController extends Controller
 
         $students = Student::forSchool($schoolId)
             ->orderBy('last_name')
-            ->get(['id', 'first_name', 'last_name', 'student_id']);
+            ->get(['id', 'first_name', 'last_name', 'student_id', 'grade_level']);
 
         $summary = $this->buildSummary($schoolId, $academicYear, $payments, $expenses);
 
@@ -92,6 +97,32 @@ class FinanceController extends Controller
         ]);
     }
 
+    public function feeBalancePreview(Request $request): JsonResponse
+    {
+        $schoolId = $this->requireTenancy();
+
+        $validated = $request->validate([
+            'studentId' => ['required', 'integer', 'exists:students,id'],
+            'academicYear' => ['required', 'string'],
+            'amount' => ['nullable', 'numeric', 'min:0'],
+            'status' => ['nullable', 'in:paid,partial,overdue,waived'],
+            'feeStructureId' => ['nullable', 'integer', 'exists:fee_structures,id'],
+        ]);
+
+        $student = Student::forSchool($schoolId)->findOrFail($validated['studentId']);
+
+        return response()->json(
+            $this->feeBalances->previewPayment(
+                $schoolId,
+                $student,
+                $validated['academicYear'],
+                (float) ($validated['amount'] ?? 0),
+                $validated['status'] ?? 'paid',
+                isset($validated['feeStructureId']) ? (int) $validated['feeStructureId'] : null,
+            ),
+        );
+    }
+
     /**
      * @param  \Illuminate\Support\Collection<int, array<string, mixed>|FeePayment>  $payments
      * @param  \Illuminate\Support\Collection<int, Expense>  $expenses
@@ -109,6 +140,12 @@ class FinanceController extends Controller
         $totalExpenses = $yearExpenses
             ->where('status', 'approved')
             ->sum('amount');
+
+        $totalCollected = collect($payments)
+            ->whereIn('status', ['paid', 'partial', 'waived'])
+            ->sum(fn ($p) => is_array($p) ? $p['amount'] : $p->amount);
+
+        $totalOutstanding = $this->feeBalances->totalOutstandingForSchool($schoolId, $academicYear);
 
         $byMonth = [];
         for ($m = 1; $m <= 12; $m++) {
@@ -138,6 +175,8 @@ class FinanceController extends Controller
             'totalIncome' => $totalIncome,
             'totalExpenses' => $totalExpenses,
             'netBalance' => $totalIncome - $totalExpenses,
+            'totalCollected' => $totalCollected,
+            'totalOutstanding' => $totalOutstanding,
             'byMonth' => $byMonth,
         ];
     }
@@ -196,14 +235,36 @@ class FinanceController extends Controller
             'notes' => ['nullable', 'string'],
         ]);
 
+        $student = Student::forSchool($schoolId)->findOrFail($validated['studentId']);
+        $amount = (float) $validated['amount'];
+        $feeStructureId = isset($validated['feeStructureId']) ? (int) $validated['feeStructureId'] : null;
+
+        $snapshot = $this->feeBalances->snapshotForPayment(
+            $schoolId,
+            $student,
+            $validated['academicYear'],
+            $amount,
+            $validated['status'],
+            $feeStructureId,
+        );
+
+        $status = $this->feeBalances->resolveStatus(
+            $amount,
+            $snapshot['balance_before'],
+            $validated['status'],
+        );
+
         $count = FeePayment::forSchool($schoolId)->count();
         $receiptNumber = sprintf('RCP-%d-%04d', now()->year, $count + 1);
 
         $payment = FeePayment::create([
             ...$this->snakeKeys($validated),
             'school_id' => $schoolId,
+            'fee_structure_id' => $feeStructureId,
+            'status' => $status,
             'receipt_number' => $receiptNumber,
             'recorded_by' => auth()->id(),
+            ...$snapshot,
         ]);
 
         $this->accounting->postFeePayment($payment);

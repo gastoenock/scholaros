@@ -3,6 +3,8 @@
 namespace App\Http\Controllers;
 
 use App\Models\School;
+use App\Services\AcademicCalendarService;
+use App\Support\TenancyUrl;
 use Illuminate\Support\Str;
 
 abstract class Controller
@@ -51,5 +53,48 @@ abstract class Controller
         }
 
         return $result;
+    }
+
+    protected function academicCalendar(): AcademicCalendarService
+    {
+        return app(AcademicCalendarService::class);
+    }
+
+    protected function tenantRoute(string $name, array $parameters = []): string
+    {
+        return TenancyUrl::tenantRoute($name, $parameters);
+    }
+
+    /**
+     * @return array<string, list<string>>
+     */
+    protected function academicYearRules(bool $required = false): array
+    {
+        return [
+            'academicYearId' => ['nullable', 'integer', 'exists:academic_years,id'],
+            'academicYear' => [$required ? 'required_without:academicYearId' : 'nullable', 'string', 'max:50'],
+        ];
+    }
+
+    /**
+     * @return array<string, list<string>>
+     */
+    protected function academicSemesterRules(bool $required = false): array
+    {
+        return [
+            'academicSemesterId' => ['nullable', 'integer', 'exists:academic_semesters,id'],
+            'academicSemester' => ['nullable', 'string', 'max:50'],
+        ];
+    }
+
+    /**
+     * @return array<string, list<string>>
+     */
+    protected function academicTermRules(bool $required = false): array
+    {
+        return [
+            'academicTermId' => ['nullable', 'integer', 'exists:academic_terms,id'],
+            'term' => [$required ? 'required_without:academicTermId' : 'nullable', 'string', 'max:50'],
+        ];
     }
 }

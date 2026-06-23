@@ -25,7 +25,7 @@ class AcademicsController extends Controller
         private ExamResultService $examResults,
     ) {}
 
-    public function index(): Response
+    public function index(Request $request): Response
     {
         $schoolId = $this->schoolId();
 
@@ -34,9 +34,9 @@ class AcademicsController extends Controller
         }
 
         $students = Student::forSchool($schoolId)->get()->keyBy('id');
-        $staff = Staff::forSchool($schoolId)->orderBy('last_name')->get();
-        $classes = SchoolClass::forSchool($schoolId)->orderBy('name')->get();
-        $subjects = Subject::forSchool($schoolId)->orderBy('name')->get();
+        $staff = Staff::forSchool($schoolId)->orderBy('last_name', 'ASC')->get();
+        $classes = SchoolClass::forSchool($schoolId)->orderBy('name', 'ASC')->get();
+        $subjects = Subject::forSchool($schoolId)->orderBy('name', 'ASC')->get();
         $assignments = Assignment::forSchool($schoolId)->orderByDesc('id')->get();
         $exams = Exam::forSchool($schoolId)->orderByDesc('exam_date')->get();
         $onlineClasses = OnlineClass::forSchool($schoolId)->orderByDesc('scheduled_at')->get();
@@ -73,7 +73,7 @@ class AcademicsController extends Controller
             'staff' => $staff,
             'students' => $students->values(),
             'school' => $this->school(),
-            'canUploadExamResults' => $this->examResults->canManageResults(auth()->user()),
+            'canUploadExamResults' => $this->examResults->canManageResults($request->user()),
         ]);
     }
 
@@ -88,10 +88,13 @@ class AcademicsController extends Controller
             'gradeLevel' => ['nullable', 'string', 'max:50'],
             'teacherId' => ['nullable', 'integer', 'exists:staff,id'],
             'description' => ['nullable', 'string'],
+            ...$this->academicYearRules(),
+            ...$this->academicSemesterRules(),
         ]);
 
         Subject::create([
             ...$this->snakeKeys($validated),
+            ...$this->academicCalendar()->applyYearAndSemester($schoolId, $validated, false),
             'school_id' => $schoolId,
         ]);
 
@@ -108,9 +111,21 @@ class AcademicsController extends Controller
             'gradeLevel' => ['nullable', 'string', 'max:50'],
             'teacherId' => ['nullable', 'integer', 'exists:staff,id'],
             'description' => ['nullable', 'string'],
+            ...$this->academicYearRules(),
+            ...$this->academicSemesterRules(),
         ]);
 
-        $subject->update($this->snakeKeys($validated));
+        $payload = $this->snakeKeys($validated);
+        if (
+            isset($validated['academicYearId'])
+            || isset($validated['academicYear'])
+            || isset($validated['academicSemesterId'])
+            || isset($validated['term'])
+        ) {
+            $payload = [...$payload, ...$this->academicCalendar()->applyYearAndSemester($subject->school_id, $validated, false)];
+        }
+
+        $subject->update($payload);
 
         return back()->with('success', 'Subject updated');
     }
@@ -139,10 +154,14 @@ class AcademicsController extends Controller
             'maxScore' => ['required', 'numeric'],
             'type' => ['required', 'in:homework,classwork,project,quiz'],
             'attachmentUrl' => ['nullable', 'string'],
+            ...$this->academicYearRules(),
+            ...$this->academicSemesterRules(),
+            ...$this->academicTermRules(),
         ]);
 
         Assignment::create([
             ...$this->snakeKeys($validated),
+            ...$this->academicCalendar()->applyCalendar($schoolId, $validated, false),
             'school_id' => $schoolId,
         ]);
 
@@ -206,13 +225,17 @@ class AcademicsController extends Controller
             'endTime' => ['nullable', 'string'],
             'maxScore' => ['required', 'numeric'],
             'passingScore' => ['nullable', 'numeric'],
-            'term' => ['nullable', 'string'],
-            'academicYear' => ['required', 'string'],
             'venue' => ['nullable', 'string'],
+            ...$this->academicYearRules(),
+            ...$this->academicSemesterRules(),
+            ...$this->academicTermRules(true),
         ]);
+
+        $validated['passingScore'] ??= settings('academics.passing_score', 50);
 
         Exam::create([
             ...$this->snakeKeys($validated),
+            ...$this->academicCalendar()->applyCalendar($schoolId, $validated, true, ['academic_year', 'term']),
             'school_id' => $schoolId,
         ]);
 
@@ -231,10 +254,23 @@ class AcademicsController extends Controller
             'maxScore' => ['nullable', 'numeric'],
             'passingScore' => ['nullable', 'numeric'],
             'venue' => ['nullable', 'string'],
-            'term' => ['nullable', 'string'],
+            ...$this->academicYearRules(),
+            ...$this->academicSemesterRules(),
+            ...$this->academicTermRules(),
         ]);
 
-        $exam->update($this->snakeKeys($validated));
+        $payload = $this->snakeKeys($validated);
+        if (
+            isset($validated['academicYearId'])
+            || isset($validated['academicYear'])
+            || isset($validated['academicSemesterId'])
+            || isset($validated['academicTermId'])
+            || isset($validated['term'])
+        ) {
+            $payload = [...$payload, ...$this->academicCalendar()->applyCalendar($exam->school_id, $validated, false, ['academic_year', 'term'])];
+        }
+
+        $exam->update($payload);
 
         return back()->with('success', 'Exam updated');
     }
@@ -251,7 +287,7 @@ class AcademicsController extends Controller
     public function bulkSaveExamResults(Request $request, Exam $exam): RedirectResponse
     {
         abort_unless($exam->school_id === $this->schoolId(), 403);
-        $this->examResults->assertCanManageResults(auth()->user());
+        $this->examResults->assertCanManageResults($request->user());
 
         $validated = $request->validate([
             'results' => ['required', 'array'],
@@ -269,7 +305,7 @@ class AcademicsController extends Controller
     public function storeExamResult(Request $request, Exam $exam): RedirectResponse
     {
         abort_unless($exam->school_id === $this->schoolId(), 403);
-        $this->examResults->assertCanManageResults(auth()->user());
+        $this->examResults->assertCanManageResults($request->user());
 
         $validated = $request->validate([
             'studentId' => ['nullable', 'integer', 'exists:students,id'],
@@ -289,7 +325,7 @@ class AcademicsController extends Controller
     public function importExamResults(Request $request, Exam $exam): RedirectResponse
     {
         abort_unless($exam->school_id === $this->schoolId(), 403);
-        $this->examResults->assertCanManageResults(auth()->user());
+        $this->examResults->assertCanManageResults($request->user());
 
         $validated = $request->validate([
             'file' => [
@@ -318,10 +354,10 @@ class AcademicsController extends Controller
         );
     }
 
-    public function downloadExamResultsTemplate(Exam $exam): StreamedResponse
+    public function downloadExamResultsTemplate(Request $request, Exam $exam): StreamedResponse
     {
         abort_unless($exam->school_id === $this->schoolId(), 403);
-        $this->examResults->assertCanManageResults(auth()->user());
+        $this->examResults->assertCanManageResults($request->user());
 
         return $this->examResults->downloadTemplate($exam);
     }
