@@ -15,6 +15,7 @@ import { Textarea } from "@/components/ui/textarea.tsx";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select.tsx";
 import { toast } from "sonner";
 import { routerDeleteWithConfirm } from "@/lib/confirm.ts";
+import { usePermissions } from "@/hooks/use-permissions.ts";
 import { motion } from "motion/react";
 import {
           BookOpen, Plus, Pencil, Trash2, ClipboardList, Video,
@@ -65,9 +66,10 @@ type PageProps = {
   students: Student[];
   school: School | null;
   canUploadExamResults: boolean;
+  canManage?: boolean;
 };
 
-function SubjectsTab({ subjects, staff }: Pick<PageProps, "subjects" | "staff">) {
+function SubjectsTab({ subjects, staff, canManage }: Pick<PageProps, "subjects" | "staff" | "canManage">) {
   const { academicCalendar } = usePage<SharedWithCalendar>().props;
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Subject | null>(null);
@@ -116,6 +118,7 @@ function SubjectsTab({ subjects, staff }: Pick<PageProps, "subjects" | "staff">)
 
   return (
     <div className="space-y-4">
+      {canManage && (
       <div className="flex justify-end">
         <Button size="sm" onClick={() => {
           setEditing(null);
@@ -128,6 +131,7 @@ function SubjectsTab({ subjects, staff }: Pick<PageProps, "subjects" | "staff">)
           <Plus className="h-4 w-4 mr-1.5" />Add Subject
         </Button>
       </div>
+      )}
       {subjects.length === 0 ? (
         <Card><CardContent className="py-12 text-center text-muted-foreground">No subjects yet.</CardContent></Card>
       ) : (
@@ -142,10 +146,12 @@ function SubjectsTab({ subjects, staff }: Pick<PageProps, "subjects" | "staff">)
                       <p className="font-bold">{s.name}</p>
                       {s.code && <Badge variant="secondary" className="text-xs mt-1">{s.code}</Badge>}
                     </div>
+                    {canManage && (
                     <div className="flex gap-1.5">
                       <button title="Edit" onClick={() => openEdit(s)} className="p-1.5 rounded hover:bg-muted cursor-pointer"><Pencil className="h-3.5 w-3.5 text-muted-foreground" /></button>
                       <button title="handleDelete" onClick={() => handleDelete(s.id)} className="p-1.5 rounded hover:bg-red-50 hover:text-red-600 cursor-pointer"><Trash2 className="h-3.5 w-3.5" /></button>
                     </div>
+                    )}
                   </div>
                   {s.gradeLevel && <p className="text-xs text-muted-foreground">Grade {s.gradeLevel}</p>}
                   {teacher && <p className="text-xs text-muted-foreground">Teacher: {teacher.firstName} {teacher.lastName}</p>}
@@ -205,7 +211,7 @@ function SubjectsTab({ subjects, staff }: Pick<PageProps, "subjects" | "staff">)
   );
 }
 
-function AssignmentsTab({ assignments, classes, subjects, staff, submissions }: Pick<PageProps, "assignments" | "classes" | "subjects" | "staff" | "submissions">) {
+function AssignmentsTab({ assignments, classes, subjects, staff, submissions, canManage }: Pick<PageProps, "assignments" | "classes" | "subjects" | "staff" | "submissions" | "canManage">) {
   const [open, setOpen] = useState(false);
   const [gradingOpen, setGradingOpen] = useState(false);
   const [selectedAssignment, setSelectedAssignment] = useState<number | null>(null);
@@ -247,7 +253,9 @@ function AssignmentsTab({ assignments, classes, subjects, staff, submissions }: 
   return (
     <div className="space-y-4">
       <div className="flex justify-end">
+        {canManage && (
         <Button size="sm" onClick={() => setOpen(true)} className="cursor-pointer"><Plus className="h-4 w-4 mr-1.5" />New Assignment</Button>
+        )}
       </div>
       {assignments.length === 0 ? (
         <Card><CardContent className="py-12 text-center text-muted-foreground">No assignments yet.</CardContent></Card>
@@ -267,12 +275,14 @@ function AssignmentsTab({ assignments, classes, subjects, staff, submissions }: 
                       </div>
                       <p className="text-xs text-muted-foreground">{cls?.name ?? "—"} · {sub?.name ?? "—"} · Due: {a.dueDate}</p>
                     </div>
+                    {canManage && (
                     <div className="flex gap-2 shrink-0">
                       <Button size="sm" variant="secondary" onClick={() => { setSelectedAssignment(a.id); setGradingOpen(true); }} className="cursor-pointer">
                         <ClipboardList className="h-3.5 w-3.5 mr-1" /> Grade
                       </Button>
                       <button title="Delete" onClick={() => void routerDeleteWithConfirm(`/dashboard/academics/assignments/${a.id}`, { title: "Delete this assignment?" })} className="p-1.5 rounded hover:bg-red-50 hover:text-red-600 cursor-pointer"><Trash2 className="h-3.5 w-3.5" /></button>
                     </div>
+                    )}
                   </div>
                 </CardContent>
               </Card>
@@ -360,7 +370,7 @@ function AssignmentsTab({ assignments, classes, subjects, staff, submissions }: 
   );
 }
 
-function ExamsTab({ exams, classes, subjects, students, examResults, canUploadExamResults }: Pick<PageProps, "exams" | "classes" | "subjects" | "students" | "examResults" | "canUploadExamResults">) {
+function ExamsTab({ exams, classes, subjects, students, examResults, canUploadExamResults, canManage }: Pick<PageProps, "exams" | "classes" | "subjects" | "students" | "examResults" | "canUploadExamResults" | "canManage">) {
   const { academicCalendar } = usePage<SharedWithCalendar>().props;
   const [open, setOpen] = useState(false);
   const [resultsOpen, setResultsOpen] = useState(false);
@@ -582,9 +592,11 @@ function ExamsTab({ exams, classes, subjects, students, examResults, canUploadEx
 
   return (
     <div className="space-y-4">
+      {canManage && (
       <div className="flex justify-end">
         <Button size="sm" onClick={() => setOpen(true)} className="cursor-pointer"><Plus className="h-4 w-4 mr-1.5" />Schedule Exam</Button>
       </div>
+      )}
       {exams.length === 0 ? (
         <Card><CardContent className="py-12 text-center text-muted-foreground">No exams scheduled.</CardContent></Card>
       ) : (
@@ -615,7 +627,9 @@ function ExamsTab({ exams, classes, subjects, students, examResults, canUploadEx
                           View Results
                         </Button>
                       )}
+                      {canManage && (
                       <button title="routeDelete" onClick={() => void routerDeleteWithConfirm(`/dashboard/academics/exams/${e.id}`, { title: "Delete this exam?" })} className="p-1.5 rounded hover:bg-red-50 hover:text-red-600 cursor-pointer"><Trash2 className="h-3.5 w-3.5" /></button>
+                      )}
                     </div>
                   </div>
                 </CardContent>
@@ -921,7 +935,7 @@ function ExamsTab({ exams, classes, subjects, students, examResults, canUploadEx
   );
 }
 
-function OnlineClassesTab({ onlineClasses, classes, subjects, staff }: Pick<PageProps, "onlineClasses" | "classes" | "subjects" | "staff">) {
+function OnlineClassesTab({ onlineClasses, classes, subjects, staff, canManage }: Pick<PageProps, "onlineClasses" | "classes" | "subjects" | "staff" | "canManage">) {
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ classId: "", subjectId: "", teacherId: "", title: "", zoomLink: "", meetingId: "", passcode: "", scheduledAt: "", durationMinutes: "60", isRecurring: false });
 
@@ -948,9 +962,11 @@ function OnlineClassesTab({ onlineClasses, classes, subjects, staff }: Pick<Page
 
   return (
     <div className="space-y-4">
+      {canManage && (
       <div className="flex justify-end">
         <Button size="sm" onClick={() => setOpen(true)} className="cursor-pointer"><Plus className="h-4 w-4 mr-1.5" />Schedule Class</Button>
       </div>
+      )}
       {onlineClasses.length === 0 ? (
         <Card><CardContent className="py-12 text-center text-muted-foreground">No online classes scheduled.</CardContent></Card>
       ) : (
@@ -973,10 +989,12 @@ function OnlineClassesTab({ onlineClasses, classes, subjects, staff }: Pick<Page
                       <a href={oc.zoomLink} target="_blank" rel="noopener noreferrer">
                         <Button size="sm" className="cursor-pointer"><ExternalLink className="h-3.5 w-3.5 mr-1" />Join</Button>
                       </a>
-                      {oc.status === "scheduled" && (
+                      {canManage && oc.status === "scheduled" && (
                         <Button size="sm" variant="secondary" onClick={() => router.put(`/dashboard/academics/online-classes/${oc.id}`, { status: "live" }, { preserveScroll: true })} className="cursor-pointer">Go Live</Button>
                       )}
-                      <button title="routeDeleteWith Concern" onClick={() => void routerDeleteWithConfirm(`/dashboard/academics/online-classes/${oc.id}`, { title: "Delete this online class?" })} className="p-1.5 rounded hover:bg-red-50 hover:text-red-600 cursor-pointer"><Trash2 className="h-3.5 w-3.5" /></button>
+                      {canManage && (
+                      <button title="Delete online class" onClick={() => void routerDeleteWithConfirm(`/dashboard/academics/online-classes/${oc.id}`, { title: "Delete this online class?" })} className="p-1.5 rounded hover:bg-red-50 hover:text-red-600 cursor-pointer"><Trash2 className="h-3.5 w-3.5" /></button>
+                      )}
                     </div>
                   </div>
                 </CardContent>
@@ -1094,6 +1112,8 @@ function AnalyticsTab({ exams, subjects, classes }: Pick<PageProps, "exams" | "s
 
 function AcademicsContent(props: PageProps) {
   const { schoolId } = useCurrentSchool();
+  const { can } = usePermissions();
+  const canManage = props.canManage ?? can("academics.manage");
 
   if (!schoolId) {
     return (
@@ -1119,10 +1139,10 @@ function AcademicsContent(props: PageProps) {
           <TabsTrigger value="online" className="cursor-pointer"><Video className="h-3.5 w-3.5 mr-1.5" />Online Classes</TabsTrigger>
           <TabsTrigger value="analytics" className="cursor-pointer"><BarChart3 className="h-3.5 w-3.5 mr-1.5" />Analytics</TabsTrigger>
         </TabsList>
-        <TabsContent value="subjects" className="mt-4"><SubjectsTab subjects={props.subjects} staff={props.staff} /></TabsContent>
-        <TabsContent value="assignments" className="mt-4"><AssignmentsTab assignments={props.assignments} classes={props.classes} subjects={props.subjects} staff={props.staff} submissions={props.submissions} /></TabsContent>
-        <TabsContent value="exams" className="mt-4"><ExamsTab exams={props.exams} classes={props.classes} subjects={props.subjects} students={props.students} examResults={props.examResults} canUploadExamResults={props.canUploadExamResults} /></TabsContent>
-        <TabsContent value="online" className="mt-4"><OnlineClassesTab onlineClasses={props.onlineClasses} classes={props.classes} subjects={props.subjects} staff={props.staff} /></TabsContent>
+        <TabsContent value="subjects" className="mt-4"><SubjectsTab subjects={props.subjects} staff={props.staff} canManage={canManage} /></TabsContent>
+        <TabsContent value="assignments" className="mt-4"><AssignmentsTab assignments={props.assignments} classes={props.classes} subjects={props.subjects} staff={props.staff} submissions={props.submissions} canManage={canManage} /></TabsContent>
+        <TabsContent value="exams" className="mt-4"><ExamsTab exams={props.exams} classes={props.classes} subjects={props.subjects} students={props.students} examResults={props.examResults} canUploadExamResults={props.canUploadExamResults} canManage={canManage} /></TabsContent>
+        <TabsContent value="online" className="mt-4"><OnlineClassesTab onlineClasses={props.onlineClasses} classes={props.classes} subjects={props.subjects} staff={props.staff} canManage={canManage} /></TabsContent>
         <TabsContent value="analytics" className="mt-4"><AnalyticsTab exams={props.exams} subjects={props.subjects} classes={props.classes} /></TabsContent>
       </Tabs>
     </div>

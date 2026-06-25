@@ -26,9 +26,14 @@ $registerCentralRoutes = static function (): void {
         ->name('logout');
 
     Route::middleware('auth:platform')->prefix('dashboard')->group(function () {
-        foreach (['dashboard.php', 'landlord.php', 'admin.php', 'schools.php', 'profile.php'] as $module) {
-            require __DIR__.'/modules/'.$module;
-        }
+        Route::middleware('role:superadmin,landlord')->group(function () {
+            foreach (['landlord.php', 'admin.php', 'schools.php'] as $module) {
+                require __DIR__.'/modules/'.$module;
+            }
+        });
+
+        require __DIR__.'/modules/dashboard.php';
+        require __DIR__.'/modules/profile.php';
     });
 
     Route::fallback(fn () => Inertia::render('not-found'));

@@ -142,7 +142,7 @@ class SettingsRegistry
                 'group' => 'finance',
                 'label' => 'Currency Code',
                 'type' => 'select',
-                'options' => ['TZS', 'USD', 'KES', 'GHS'],
+                'options' => ['TZS', 'USD', 'KES', 'UGX', 'RUB', 'EUR'],
                 'default' => 'TZS',
             ],
             'finance.fee_reminder_days' => [

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { router } from "@inertiajs/react";
+import { Link, router } from "@inertiajs/react";
 import { DashboardLayout } from "../_components/layout.tsx";
 import { useCurrentSchool } from "../_components/use-current-school.ts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card.tsx";
@@ -254,6 +254,9 @@ function DormitoryContent({ rooms, allocations, maintenance, securityLogs, stude
           <h1 className="text-2xl font-bold">Dormitory Management</h1>
           <p className="text-muted-foreground text-sm">Rooms, allocations, maintenance & security</p>
         </div>
+        <Link href="/dashboard/rooms" className="text-sm text-primary hover:underline mr-auto sm:mr-0">
+          Manage rooms →
+        </Link>
         <div className="flex gap-2 flex-wrap">
           <Dialog open={roomOpen} onOpenChange={setRoomOpen}>
             <DialogTrigger asChild>

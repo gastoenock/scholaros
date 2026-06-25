@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { router, usePage } from "@inertiajs/react";
+import { useState, useEffect } from "react";
+import { Link, router, usePage } from "@inertiajs/react";
 import { DashboardLayout } from "../_components/layout.tsx";
 import { useCurrentSchool } from "../_components/use-current-school.ts";
 import { AcademicYearField } from "@/components/academic-calendar-fields.tsx";
@@ -12,40 +12,53 @@ import { Label } from "@/components/ui/label.tsx";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select.tsx";
+import { Checkbox } from "@/components/ui/checkbox.tsx";
 import { toast } from "sonner";
 import { routerDeleteWithConfirm } from "@/lib/confirm.ts";
-import { motion } from "motion/react";
-import { BookOpen, Plus, Trash2, Pencil, Users } from "lucide-react";
+import { BookOpen, Plus, Trash2, Pencil, Users, Eye } from "lucide-react";
 import type { StaffMember } from "../staff/page.tsx";
 import type { Student } from "../students/page.tsx";
+import { roomLabel, type RoomOption } from "@/lib/rooms.ts";
+import { motion } from "motion/react";
 
 export type SchoolClass = {
   id: number;
+  uuid: string;
   schoolId: number;
   schoolBranchId?: number | null;
   name: string;
   gradeLevel: string;
   section?: string | null;
   classTeacherId?: number | null;
+  classRoomId?: number | null;
+  assignedRoom?: RoomOption | null;
   room?: string | null;
   academicYear: string;
   academicYearId?: number | null;
   capacity?: number | null;
+  subjectIds?: number[];
   createdAt: string;
+};
+
+type SubjectOption = {
+  id: number;
+  name: string;
+  code?: string | null;
+  gradeLevel?: string | null;
 };
 
 type ClassForm = {
   name: string;
   gradeLevel: string;
   section: string;
-  room: string;
   academicYearId: number | null;
   capacity: string;
+  subjectIds: number[];
 };
 
-const EMPTY: ClassForm = { name: "", gradeLevel: "", section: "", room: "", academicYearId: null, capacity: "" };
+const EMPTY: ClassForm = { name: "", gradeLevel: "", section: "", academicYearId: null, capacity: "", subjectIds: [] };
 
-function ClassesContent({ classes, staff, students }: PageProps) {
+function ClassesContent({ classes, staff, students, subjects }: PageProps) {
   const { schoolId } = useCurrentSchool();
   const { academicCalendar } = usePage<SharedWithCalendar>().props;
   const [open, setOpen] = useState(false);
@@ -60,12 +73,33 @@ function ClassesContent({ classes, staff, students }: PageProps) {
       name: c.name,
       gradeLevel: c.gradeLevel,
       section: c.section ?? "",
-      room: c.room ?? "",
       academicYearId: c.academicYearId ?? defaultYearId(academicCalendar),
       capacity: c.capacity?.toString() ?? "",
+      subjectIds: c.subjectIds ?? [],
     });
     setOpen(true);
   };
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const editUuid = params.get("edit");
+    if (!editUuid) return;
+    const match = classes.find((c) => c.uuid === editUuid);
+    if (match) openEdit(match);
+  }, [classes]);
+
+  const toggleSubject = (subjectId: number) => {
+    setForm((prev) => ({
+      ...prev,
+      subjectIds: prev.subjectIds.includes(subjectId)
+        ? prev.subjectIds.filter((id) => id !== subjectId)
+        : [...prev.subjectIds, subjectId],
+    }));
+  };
+
+  const subjectsForGrade = subjects.filter(
+    (s) => !form.gradeLevel || !s.gradeLevel || s.gradeLevel === form.gradeLevel,
+  );
 
   const handleSave = () => {
     if (!form.name || !form.gradeLevel) return;
@@ -74,9 +108,9 @@ function ClassesContent({ classes, staff, students }: PageProps) {
       name: form.name,
       gradeLevel: form.gradeLevel,
       section: form.section || undefined,
-      room: form.room || undefined,
       academicYearId: form.academicYearId ?? undefined,
       capacity: form.capacity ? parseInt(form.capacity) : undefined,
+      subjectIds: form.subjectIds,
     };
     const options = {
       preserveScroll: true,
@@ -88,14 +122,14 @@ function ClassesContent({ classes, staff, students }: PageProps) {
       onFinish: () => setSaving(false),
     };
     if (editing) {
-      router.put(`/dashboard/classes/${editing.id}`, payload, options);
+      router.put(`/dashboard/classes/${editing.uuid}`, payload, options);
     } else {
       router.post("/dashboard/classes", payload, options);
     }
   };
 
-  const handleDelete = async (id: number) => {
-    await routerDeleteWithConfirm(`/dashboard/classes/${id}`, {
+  const handleDelete = async (uuid: string) => {
+    await routerDeleteWithConfirm(`/dashboard/classes/${uuid}`, {
       title: "Delete this class?",
       onSuccess: () => toast.success("Class deleted"),
       onError: () => toast.error("Failed to delete class"),
@@ -103,7 +137,7 @@ function ClassesContent({ classes, staff, students }: PageProps) {
   };
 
   const getStudentCount = (c: SchoolClass) =>
-    students.filter((s) => s.classSection === c.name || s.classSection === `${c.name}-${c.section}`).length;
+    students.filter((s) => s.classId === c.id).length;
 
   if (!schoolId) {
     return <div className="text-muted-foreground text-center py-20">No school linked.</div>;
@@ -140,6 +174,7 @@ function ClassesContent({ classes, staff, students }: PageProps) {
           {classes.map((c, i) => {
             const teacher = staff.find((s) => s.id === c.classTeacherId);
             const studentCount = getStudentCount(c);
+            const classSubjects = subjects.filter((s) => (c.subjectIds ?? []).includes(s.id));
             return (
               <motion.div
                 key={c.id}
@@ -155,10 +190,13 @@ function ClassesContent({ classes, staff, students }: PageProps) {
                         <p className="text-sm text-muted-foreground">Grade {c.gradeLevel}{c.section ? ` · Section ${c.section}` : ""}</p>
                       </div>
                       <div className="flex gap-1.5">
-                        <button title="openEdit" onClick={() => openEdit(c)} className="p-1.5 rounded hover:bg-muted cursor-pointer">
+                        <Link href={`/dashboard/classes/${c.uuid}`} className="p-1.5 rounded hover:bg-muted cursor-pointer" title="View class">
+                          <Eye className="h-3.5 w-3.5 text-muted-foreground" />
+                        </Link>
+                        <button title="Edit class" onClick={() => openEdit(c)} className="p-1.5 rounded hover:bg-muted cursor-pointer">
                           <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
                         </button>
-                        <button title="handleDelete" onClick={() => handleDelete(c.id)} className="p-1.5 rounded hover:bg-red-50 hover:text-red-600 cursor-pointer">
+                        <button title="Delete class" onClick={() => handleDelete(c.uuid)} className="p-1.5 rounded hover:bg-red-50 hover:text-red-600 cursor-pointer">
                           <Trash2 className="h-3.5 w-3.5" />
                         </button>
                       </div>
@@ -174,8 +212,15 @@ function ClassesContent({ classes, staff, students }: PageProps) {
                           <span>Class Teacher: {teacher.firstName} {teacher.lastName}</span>
                         </div>
                       )}
-                      {c.room && (
-                        <div className="text-muted-foreground">Room: {c.room}</div>
+                      {(c.assignedRoom || c.room) && (
+                        <div className="text-muted-foreground">
+                          Room: {c.assignedRoom ? roomLabel(c.assignedRoom) : c.room}
+                        </div>
+                      )}
+                      {classSubjects.length > 0 && (
+                        <div className="text-muted-foreground text-xs">
+                          Subjects: {classSubjects.map((s) => s.name).join(", ")}
+                        </div>
                       )}
                     </div>
                   </CardContent>
@@ -208,22 +253,43 @@ function ClassesContent({ classes, staff, students }: PageProps) {
                 <Input value={form.section} onChange={(e) => setForm((p) => ({ ...p, section: e.target.value }))} placeholder="e.g. A" />
               </div>
               <div className="space-y-1.5">
-                <Label>Room</Label>
-                <Input value={form.room} onChange={(e) => setForm((p) => ({ ...p, room: e.target.value }))} placeholder="e.g. Room 101" />
+                <Label>Capacity</Label>
+                <Input type="number" value={form.capacity} onChange={(e) => setForm((p) => ({ ...p, capacity: e.target.value }))} placeholder="e.g. 30" />
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <p className="text-xs text-muted-foreground">
+              Assign a classroom from{" "}
+              <Link href="/dashboard/rooms" className="text-primary hover:underline">Room Management</Link>
+              {" "}after creating the class.
+            </p>
+            <div className="grid grid-cols-1 gap-3">
               <AcademicYearField
                 calendar={academicCalendar}
                 value={form.academicYearId}
                 onChange={(academicYearId) => setForm((p) => ({ ...p, academicYearId }))}
                 required
               />
-              <div className="space-y-1.5">
-                <Label>Capacity</Label>
-                <Input type="number" value={form.capacity} onChange={(e) => setForm((p) => ({ ...p, capacity: e.target.value }))} placeholder="e.g. 30" />
-              </div>
             </div>
+            {subjects.length > 0 && (
+              <div className="space-y-2">
+                <Label>Subjects Undertaken</Label>
+                <p className="text-xs text-muted-foreground">Select the subjects this class level takes. These appear on student examination reports.</p>
+                <div className="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto border rounded-md p-3">
+                  {subjectsForGrade.map((subject) => (
+                    <label key={subject.id} className="flex items-center gap-2 text-sm cursor-pointer">
+                      <Checkbox
+                        checked={form.subjectIds.includes(subject.id)}
+                        onCheckedChange={() => toggleSubject(subject.id)}
+                      />
+                      <span>{subject.name}{subject.code ? ` (${subject.code})` : ""}</span>
+                    </label>
+                  ))}
+                  {subjectsForGrade.length === 0 && (
+                    <p className="text-sm text-muted-foreground col-span-2">No subjects match this grade level.</p>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
           <DialogFooter>
             <Button variant="secondary" onClick={() => setOpen(false)} className="cursor-pointer">Cancel</Button>
@@ -241,6 +307,7 @@ type PageProps = {
   classes: SchoolClass[];
   staff: StaffMember[];
   students: Student[];
+  subjects: SubjectOption[];
 };
 
 export default function ClassesPage(props: PageProps) {

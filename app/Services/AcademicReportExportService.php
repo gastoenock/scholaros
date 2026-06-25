@@ -180,27 +180,32 @@ class AcademicReportExportService
             ['Student', $student['name'] ?? ''],
             ['Student ID', $student['studentId'] ?? ''],
             ['Grade', trim(($student['gradeLevel'] ?? '').' '.($student['classSection'] ?? ''))],
+            ['Class Teacher', $report['classTeacher']['name'] ?? '—'],
             [],
-            ['Exams Taken', $summary['examsTaken'] ?? 0],
+            ['Subjects', $summary['subjectsTotal'] ?? count($report['rows'] ?? [])],
+            ['Scored', $summary['examsTaken'] ?? 0],
             ['Average Score', $summary['averageScore'] ?? '—'],
             ['Passed', $summary['passed'] ?? 0],
             ['Failed', $summary['failed'] ?? 0],
             [],
-            ['Exam', 'Subject', 'Class', 'Term', 'Score', 'Max', 'Grade', 'Status', 'Remarks'],
+            ['Subject', 'Exam', 'Score', 'Max', 'Grade', 'Status', 'Remarks'],
         ];
 
         foreach ($report['rows'] as $row) {
             $rows[] = [
-                $row['title'],
                 $row['subject'],
-                $row['className'],
-                $row['term'],
+                $row['title'] ?? (($row['hasExam'] ?? false) ? '—' : 'No exam scheduled'),
                 $row['score'] ?? '—',
-                $row['maxScore'],
+                $row['maxScore'] ?? '—',
                 $row['grade'] ?? '—',
                 $row['passed'] === null ? '—' : ($row['passed'] ? 'Pass' : 'Fail'),
                 $row['remarks'] ?? '',
             ];
+        }
+
+        if (! empty($report['classTeacherComment'])) {
+            $rows[] = [];
+            $rows[] = ['Class Teacher Comment', strip_tags($report['classTeacherComment'])];
         }
 
         return $rows;
@@ -214,6 +219,8 @@ class AcademicReportExportService
     {
         $cls = $report['class'];
         $summary = $report['summary'] ?? [];
+        $subjects = $report['subjects'] ?? [];
+        $subjectNames = $summary['subjects'] ?? array_column($subjects, 'name');
 
         $rows = [
             ['Class', $cls['name'] ?? ''],
@@ -221,36 +228,22 @@ class AcademicReportExportService
             ['Section', $cls['section'] ?? ''],
             [],
             ['Students', $summary['studentCount'] ?? 0],
-            ['Exams', $summary['examCount'] ?? 0],
+            ['Subjects', implode(', ', $subjectNames)],
             ['Class Average', $summary['classAverage'] ?? '—'],
             [],
-            ['Student', 'Student ID', 'Exams Taken', 'Average Score'],
+            array_merge(['Student', 'Student ID'], $subjectNames, ['Average Score']),
         ];
 
         foreach ($report['students'] as $student) {
-            $rows[] = [
-                $student['name'],
-                $student['studentNumber'],
-                $student['examsTaken'] ?? 0,
-                $student['averageScore'] ?? '—',
-            ];
-        }
-
-        $rows[] = [];
-        $rows[] = ['— Detailed Results'];
-        $rows[] = ['Student', 'Exam', 'Subject', 'Score', 'Grade', 'Max Score'];
-
-        foreach ($report['students'] as $student) {
-            foreach ($student['results'] as $result) {
-                $rows[] = [
-                    $student['name'],
-                    $result['examTitle'],
-                    $result['subject'],
-                    $result['score'] ?? '—',
-                    $result['grade'] ?? '—',
-                    $result['maxScore'],
-                ];
-            }
+            $subjectResults = $student['subjectResults'] ?? $student['results'] ?? [];
+            $rows[] = array_merge(
+                [$student['name'], $student['studentNumber']],
+                array_map(
+                    fn ($result) => isset($result['score']) ? $result['score'] : '—',
+                    $subjectResults,
+                ),
+                [$student['averageScore'] ?? '—'],
+            );
         }
 
         return $rows;
@@ -299,6 +292,7 @@ class AcademicReportExportService
         $summary = $report['summary'] ?? [];
 
         $rows = [
+            ['Total Subjects', $summary['totalSubjects'] ?? count($report['bySubject'] ?? [])],
             ['Total Exams', $summary['totalExams'] ?? 0],
             ['Total Results', $summary['totalResults'] ?? 0],
             ['School Average', $summary['schoolAverage'] ?? '—'],

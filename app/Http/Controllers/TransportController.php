@@ -4,8 +4,11 @@ namespace App\Http\Controllers;
 
 use App\Models\Bus;
 use App\Models\BusRoute;
+use App\Models\ParentStudentLink;
 use App\Models\Student;
 use App\Models\TransportAssignment;
+use App\Models\User;
+use App\Support\RoleAccess;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
@@ -16,8 +19,17 @@ class TransportController extends Controller
 {
     public function index(): Response
     {
+        $user = auth()->user();
         $schoolId = $this->schoolId();
         $academicYear = now()->year.'-'.(now()->year + 1);
+        $canManage = RoleAccess::can($user, 'transport.manage');
+        $isParentView = $user instanceof User
+            && RoleAccess::can($user, 'transport.view')
+            && ! $canManage;
+
+        if ($isParentView) {
+            return Inertia::render('dashboard/transport/page', $this->parentIndexPayload($schoolId, $user, $academicYear));
+        }
 
         $routes = $schoolId ? BusRoute::forSchool($schoolId)->get() : collect();
         $buses = $schoolId ? Bus::forSchool($schoolId)->get() : collect();
@@ -36,13 +48,77 @@ class TransportController extends Controller
             'buses' => $buses,
             'assignments' => $assignments,
             'students' => $students,
+            'children' => [],
+            'canManage' => $canManage,
+            'isParentView' => false,
         ]);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function parentIndexPayload(?int $schoolId, User $user, string $academicYear): array
+    {
+        if (! $schoolId) {
+            return [
+                'routes' => [],
+                'buses' => [],
+                'assignments' => [],
+                'students' => [],
+                'children' => [],
+                'canManage' => false,
+                'isParentView' => true,
+            ];
+        }
+
+        $studentIds = ParentStudentLink::where('parent_user_id', $user->id)->pluck('student_id');
+        $students = Student::forSchool($schoolId)->whereIn('id', $studentIds)->orderBy('last_name')->get([
+            'id', 'first_name', 'last_name', 'student_id', 'class_section', 'grade_level',
+            'date_of_birth', 'city', 'address', 'gender',
+        ]);
+
+        $assignments = TransportAssignment::forSchool($schoolId)
+            ->where('academic_year', $academicYear)
+            ->whereIn('student_id', $studentIds)
+            ->get();
+
+        $busIds = $assignments->pluck('bus_id')->unique()->filter();
+        $routeIds = $assignments->pluck('route_id')->unique()->filter();
+
+        $buses = Bus::forSchool($schoolId)->whereIn('id', $busIds)->get();
+        $routes = BusRoute::forSchool($schoolId)->whereIn('id', $routeIds)->get();
+
+        $busById = $buses->keyBy('id');
+        $routeById = $routes->keyBy('id');
+        $assignmentByStudent = $assignments->keyBy('student_id');
+
+        $children = $students->map(function (Student $student) use ($assignmentByStudent, $busById, $routeById) {
+            $assignment = $assignmentByStudent->get($student->id);
+
+            return [
+                'student' => $student,
+                'assignment' => $assignment,
+                'bus' => $assignment ? $busById->get($assignment->bus_id) : null,
+                'route' => $assignment ? $routeById->get($assignment->route_id) : null,
+            ];
+        })->values();
+
+        return [
+            'routes' => $routes,
+            'buses' => $buses,
+            'assignments' => $assignments,
+            'students' => $students,
+            'children' => $children,
+            'canManage' => false,
+            'isParentView' => true,
+        ];
     }
 
     // ─── Bus Routes ──────────────────────────────────────────────
 
     public function storeRoute(Request $request): RedirectResponse
     {
+        abort_unless(RoleAccess::can(auth()->user(), 'transport.manage'), 403);
         $schoolId = $this->schoolId();
         abort_unless($schoolId, 403);
 
@@ -70,6 +146,7 @@ class TransportController extends Controller
 
     public function destroyRoute(BusRoute $busRoute): RedirectResponse
     {
+        abort_unless(RoleAccess::can(auth()->user(), 'transport.manage'), 403);
         abort_unless($busRoute->school_id === $this->schoolId(), 403);
 
         $busRoute->delete();
@@ -81,6 +158,7 @@ class TransportController extends Controller
 
     public function storeBus(Request $request): RedirectResponse
     {
+        abort_unless(RoleAccess::can(auth()->user(), 'transport.manage'), 403);
         $schoolId = $this->schoolId();
         abort_unless($schoolId, 403);
 
@@ -111,6 +189,7 @@ class TransportController extends Controller
      */
     public function updateBus(Request $request, Bus $bus): RedirectResponse
     {
+        abort_unless(RoleAccess::can(auth()->user(), 'transport.manage'), 403);
         abort_unless($bus->school_id === $this->schoolId(), 403);
 
         $validated = $request->validate([
@@ -135,6 +214,7 @@ class TransportController extends Controller
 
     public function destroyBus(Bus $bus): RedirectResponse
     {
+        abort_unless(RoleAccess::can(auth()->user(), 'transport.manage'), 403);
         abort_unless($bus->school_id === $this->schoolId(), 403);
 
         $bus->delete();
@@ -146,6 +226,7 @@ class TransportController extends Controller
 
     public function storeAssignment(Request $request): RedirectResponse
     {
+        abort_unless(RoleAccess::can(auth()->user(), 'transport.manage'), 403);
         $schoolId = $this->schoolId();
         abort_unless($schoolId, 403);
 
@@ -165,6 +246,7 @@ class TransportController extends Controller
 
     public function bulkStoreAssignments(Request $request): RedirectResponse
     {
+        abort_unless(RoleAccess::can(auth()->user(), 'transport.manage'), 403);
         $schoolId = $this->schoolId();
         abort_unless($schoolId, 403);
 
@@ -197,6 +279,7 @@ class TransportController extends Controller
 
     public function updateAssignment(Request $request, TransportAssignment $transportAssignment): RedirectResponse
     {
+        abort_unless(RoleAccess::can(auth()->user(), 'transport.manage'), 403);
         $schoolId = $this->schoolId();
         abort_unless($schoolId && $transportAssignment->school_id === $schoolId, 403);
 
@@ -238,6 +321,7 @@ class TransportController extends Controller
 
     public function destroyAssignment(TransportAssignment $transportAssignment): RedirectResponse
     {
+        abort_unless(RoleAccess::can(auth()->user(), 'transport.manage'), 403);
         abort_unless($transportAssignment->school_id === $this->schoolId(), 403);
 
         $transportAssignment->delete();

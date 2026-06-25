@@ -51,39 +51,39 @@
 }
 
 :root {
-  --radius: 0.5rem;
-  /* Navy & Gold — Philadelphia prestige */
-  --background: oklch(0.98 0.003 240);
-  --foreground: oklch(0.15 0.02 240);
+  --radius: 0.625rem;
+  /* Opatix-inspired light admin shell */
+  --background: oklch(0.985 0.002 240);
+  --foreground: oklch(0.2 0.02 255);
   --card: oklch(1 0 0);
-  --card-foreground: oklch(0.15 0.02 240);
+  --card-foreground: oklch(0.2 0.02 255);
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.15 0.02 240);
-  --primary: oklch(0.28 0.08 255);
-  --primary-foreground: oklch(0.98 0 0);
-  --secondary: oklch(0.94 0.01 240);
-  --secondary-foreground: oklch(0.28 0.08 255);
-  --muted: oklch(0.94 0.005 240);
-  --muted-foreground: oklch(0.52 0.02 240);
-  --accent: oklch(0.75 0.15 80);
-  --accent-foreground: oklch(0.15 0.02 240);
+  --popover-foreground: oklch(0.2 0.02 255);
+  --primary: oklch(0.45 0.14 255);
+  --primary-foreground: oklch(0.99 0 0);
+  --secondary: oklch(0.96 0.005 240);
+  --secondary-foreground: oklch(0.35 0.06 255);
+  --muted: oklch(0.96 0.004 240);
+  --muted-foreground: oklch(0.5 0.02 255);
+  --accent: oklch(0.94 0.02 255);
+  --accent-foreground: oklch(0.35 0.06 255);
   --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.88 0.008 240);
-  --input: oklch(0.88 0.008 240);
-  --ring: oklch(0.28 0.08 255);
+  --border: oklch(0.91 0.006 240);
+  --input: oklch(0.91 0.006 240);
+  --ring: oklch(0.45 0.14 255);
   --chart-1: oklch(0.646 0.222 41.116);
   --chart-2: oklch(0.6 0.118 184.704);
   --chart-3: oklch(0.398 0.07 227.392);
   --chart-4: oklch(0.828 0.189 84.429);
   --chart-5: oklch(0.769 0.188 70.08);
-  --sidebar: oklch(0.18 0.05 255);
-  --sidebar-foreground: oklch(0.92 0.01 240);
-  --sidebar-primary: oklch(0.75 0.15 80);
-  --sidebar-primary-foreground: oklch(0.15 0.02 240);
-  --sidebar-accent: oklch(0.26 0.07 255);
-  --sidebar-accent-foreground: oklch(0.92 0.01 240);
-  --sidebar-border: oklch(0.28 0.06 255);
-  --sidebar-ring: oklch(0.75 0.15 80);
+  --sidebar: oklch(1 0 0);
+  --sidebar-foreground: oklch(0.35 0.04 255);
+  --sidebar-primary: oklch(0.45 0.14 255);
+  --sidebar-primary-foreground: oklch(0.99 0 0);
+  --sidebar-accent: oklch(0.96 0.01 255);
+  --sidebar-accent-foreground: oklch(0.35 0.06 255);
+  --sidebar-border: oklch(0.91 0.006 240);
+  --sidebar-ring: oklch(0.45 0.14 255);
 }
 
 .dark {
@@ -118,6 +118,45 @@
   --sidebar-accent-foreground: oklch(0.92 0.01 240);
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.75 0.15 80);
+}
+
+/* Dynamic color schemes (Midone / Opatix style) */
+[data-color-scheme="default"] {
+  --primary: oklch(0.45 0.14 255);
+  --ring: oklch(0.45 0.14 255);
+  --sidebar-primary: oklch(0.45 0.14 255);
+}
+
+[data-color-scheme="ocean"] {
+  --primary: oklch(0.58 0.16 230);
+  --ring: oklch(0.58 0.16 230);
+  --sidebar-primary: oklch(0.58 0.16 230);
+}
+
+[data-color-scheme="emerald"] {
+  --primary: oklch(0.62 0.15 160);
+  --ring: oklch(0.62 0.15 160);
+  --sidebar-primary: oklch(0.62 0.15 160);
+}
+
+[data-color-scheme="ruby"] {
+  --primary: oklch(0.55 0.2 15);
+  --ring: oklch(0.55 0.2 15);
+  --sidebar-primary: oklch(0.55 0.2 15);
+}
+
+[data-color-scheme="violet"] {
+  --primary: oklch(0.55 0.18 295);
+  --ring: oklch(0.55 0.18 295);
+  --sidebar-primary: oklch(0.55 0.18 295);
+}
+
+[data-color-scheme="amber"] {
+  --primary: oklch(0.68 0.16 75);
+  --primary-foreground: oklch(0.2 0.02 75);
+  --ring: oklch(0.68 0.16 75);
+  --sidebar-primary: oklch(0.68 0.16 75);
+  --sidebar-primary-foreground: oklch(0.2 0.02 75);
 }
 
 @layer base {

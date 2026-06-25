@@ -51,6 +51,7 @@ class HandleInertiaRequests extends Middleware
                     'preferences' => app(\App\Services\SettingsService::class)
                         ->resolveUserPreferences($user->preferences ?? null),
                 ] : null,
+                'permissions' => \App\Support\RoleAccess::permissions($user),
             ],
             'platform' => [
                 'isPlatformAdmin' => $user?->isPlatformAdmin() ?? false,

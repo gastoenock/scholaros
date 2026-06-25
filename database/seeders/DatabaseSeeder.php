@@ -8,10 +8,9 @@ use App\Models\AttendanceRecord;
 use App\Services\AcademicCalendarService;
 use App\Models\Bus;
 use App\Models\BusRoute;
+use App\Models\ClassRoom;
 use App\Models\DormRoom;
 use App\Models\Event;
-use App\Models\Exam;
-use App\Models\ExamResult;
 use App\Models\Expense;
 use App\Models\FeePayment;
 use App\Models\FeeStructure;
@@ -20,6 +19,7 @@ use App\Models\LibraryBook;
 use App\Models\MaintenanceRequest;
 use App\Models\Meeting;
 use App\Models\Message;
+use App\Models\ParentStudentLink;
 use App\Models\PayrollRecord;
 use App\Models\PlatformUser;
 use App\Models\School;
@@ -34,6 +34,7 @@ use App\Models\User;
 use App\Services\AccountingService;
 use App\Support\TenantDatabaseCleaner;
 use Database\Seeders\Concerns\SeedsInventory;
+use Database\Seeders\Concerns\SeedsExaminationResults;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Hash;
@@ -42,6 +43,7 @@ use Illuminate\Support\Str;
 class DatabaseSeeder extends Seeder
 {
     use SeedsInventory;
+    use SeedsExaminationResults;
 
     public function run(): void
     {
@@ -221,7 +223,19 @@ class DatabaseSeeder extends Seeder
             ];
 
             $classIds = [];
+            $classRoomIds = [];
             foreach ($classesData as [$name, $grade, $section, $branch, $room, $capacity, $teacherKey]) {
+                $roomKey = "$branch-$room";
+                if (! isset($classRoomIds[$roomKey])) {
+                    $classRoom = ClassRoom::create([
+                        'school_id' => $schoolId,
+                        'school_branch_id' => $branchIds[$branch],
+                        'name' => $room,
+                        'status' => 'available',
+                    ]);
+                    $classRoomIds[$roomKey] = $classRoom->id;
+                }
+
                 $class = SchoolClass::create([
                     'school_id' => $schoolId,
                     'school_branch_id' => $branchIds[$branch],
@@ -229,6 +243,7 @@ class DatabaseSeeder extends Seeder
                     'grade_level' => $grade,
                     'section' => $section,
                     'class_teacher_id' => $staffIds[$teacherKey],
+                    'class_room_id' => $classRoomIds[$roomKey],
                     'room' => $room,
                     'academic_year' => $academicYear,
                     'academic_year_id' => $currentYear->id,
@@ -280,6 +295,7 @@ class DatabaseSeeder extends Seeder
                             'student_id' => $studentKey,
                             'grade_level' => $grade,
                             'class_section' => $section,
+                            'class_id' => $classIds["{$branchCode}-{$grade}{$section}"] ?? null,
                             'city' => $area['city'],
                             'address' => $area['address'].' #'.rand(1, 200),
                             'enrollment_date' => '2024-09-02',
@@ -300,6 +316,50 @@ class DatabaseSeeder extends Seeder
                         $studentRecords[] = $student;
                         $counter++;
                     }
+                }
+            }
+
+            // ─── Portal login accounts (teacher, parent, student) ───
+            $demoStudent = $studentRecords[0] ?? null;
+            if ($demoStudent) {
+                $studentUser = User::create([
+                    'name' => trim("{$demoStudent->first_name} {$demoStudent->last_name}"),
+                    'email' => 'student@abama.edu.tz',
+                    'password' => Hash::make('password'),
+                    'role' => 'student',
+                    'school_id' => $schoolId,
+                    'is_active' => true,
+                ]);
+                $demoStudent->update([
+                    'user_id' => $studentUser->id,
+                    'email' => 'student@abama.edu.tz',
+                ]);
+
+                $parentUser = User::create([
+                    'name' => 'Demo Parent',
+                    'email' => 'parent@abama.edu.tz',
+                    'password' => Hash::make('password'),
+                    'role' => 'parent',
+                    'school_id' => $schoolId,
+                    'is_active' => true,
+                ]);
+
+                ParentStudentLink::create([
+                    'school_id' => $schoolId,
+                    'parent_user_id' => $parentUser->id,
+                    'student_id' => $demoStudent->id,
+                    'relationship' => 'parent',
+                    'is_primary' => true,
+                ]);
+            }
+
+            foreach ([
+                ['a.kimaro@abama.edu.tz', 'STF-A002'],
+                ['f.moshi@abama.edu.tz', 'STF-A004'],
+            ] as [$email, $staffKey]) {
+                $userId = User::where('email', $email)->value('id');
+                if ($userId && isset($staffIds[$staffKey])) {
+                    Staff::where('id', $staffIds[$staffKey])->update(['user_id' => $userId]);
                 }
             }
 
@@ -633,66 +693,16 @@ class DatabaseSeeder extends Seeder
             $vendorIds = $this->seedInventoryVendors($schoolId);
             $this->seedInventoryAssets($schoolId, $vendorIds);
 
-            // ─── Exams + results ─────────────────────────────────────
-            $class7A = $classIds['ABAMA_A-Grade 7A'];
-
-            $exam1 = Exam::create([
-                'school_id' => $schoolId,
-                'class_id' => $class7A,
-                'subject_id' => $subjectIds['MATH'],
-                'title' => 'Mathematics Mid-Term Exam',
-                'exam_date' => '2026-06-15',
-                'start_time' => '09:00',
-                'end_time' => '11:00',
-                'max_score' => 100,
-                'passing_score' => 50,
-                'term' => 'Term 2',
-                'academic_year' => $academicYear,
-                'academic_year_id' => $currentYear->id,
-                'academic_semester_id' => $semester1?->id,
-                'academic_term_id' => $term2?->id,
-                'venue' => 'Exam Hall A',
-            ]);
-
-            $exam2 = Exam::create([
-                'school_id' => $schoolId,
-                'class_id' => $class7A,
-                'subject_id' => $subjectIds['ENG'],
-                'title' => 'English Language Mid-Term Exam',
-                'exam_date' => '2026-06-16',
-                'start_time' => '09:00',
-                'end_time' => '11:00',
-                'max_score' => 100,
-                'passing_score' => 50,
-                'term' => 'Term 2',
-                'academic_year' => $academicYear,
-                'academic_year_id' => $currentYear->id,
-                'academic_semester_id' => $semester1?->id,
-                'academic_term_id' => $term2?->id,
-                'venue' => 'Exam Hall A',
-            ]);
-
-            foreach (array_slice($studentRecords, 0, 5) as $student) {
-                $sId = $student->id;
-                $mathScore = rand(55, 95);
-                ExamResult::create([
-                    'exam_id' => $exam1->id,
-                    'student_id' => $sId,
-                    'school_id' => $schoolId,
-                    'score' => $mathScore,
-                    'grade' => $mathScore >= 80 ? 'A' : ($mathScore >= 70 ? 'B' : ($mathScore >= 60 ? 'C' : 'D')),
-                ]);
-                $engScore = rand(60, 95);
-                ExamResult::create([
-                    'exam_id' => $exam2->id,
-                    'student_id' => $sId,
-                    'school_id' => $schoolId,
-                    'score' => $engScore,
-                    'grade' => $engScore >= 80 ? 'A' : ($engScore >= 70 ? 'B' : ($engScore >= 60 ? 'C' : 'D')),
-                ]);
-            }
+            // ─── Exams + results (all subjects, all students per class) ─
+            $this->seedExaminationResults(
+                $schoolId,
+                $currentYear->id,
+                $semester1?->id,
+                $term2?->id,
+            );
 
             // ─── Assignments ─────────────────────────────────────────
+            $class7A = $classIds['ABAMA_A-Grade 7A'];
             $assignmentsData = [
                 ['MATH', 'STF-A002', 'Algebraic Expressions Practice', 'Complete exercises 1-20 on page 45 of your textbook', '2026-06-10', 20, 'homework'],
                 ['ENG', 'STF-A004', 'Essay Writing - My Community', 'Write a 500-word essay about the importance of community service', '2026-06-12', 30, 'homework'],

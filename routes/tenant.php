@@ -40,7 +40,17 @@ Route::domain('{schoolSlug}.'.$centralDomain)
             ->name('tenant.logout');
 
         Route::middleware(['auth:platform,web', 'tenant'])->prefix('dashboard')->group(function () {
-            Route::get('/', [DashboardController::class, 'index'])->name('tenant.dashboard.index');
+            Route::middleware('role:'.implode(',', config('roles.dashboard', [])))
+                ->get('/', [DashboardController::class, 'index'])
+                ->name('tenant.dashboard.index');
+
+            Route::middleware('role:'.implode(',', config('roles.teacher_dashboard', ['teacher'])))
+                ->get('/teacher', [DashboardController::class, 'teacher'])
+                ->name('dashboard.teacher');
+
+            Route::middleware('role:'.implode(',', config('roles.student_dashboard', ['student'])))
+                ->get('/student', [DashboardController::class, 'student'])
+                ->name('dashboard.student');
 
             Route::middleware('auth:platform')->post('/landlord/tenants/leave', [LandlordController::class, 'leave'])
                 ->name('tenant.landlord.leave');
@@ -52,13 +62,33 @@ Route::domain('{schoolSlug}.'.$centralDomain)
                 'schools.php',
             ];
 
+            $rbacExcluded = ['academics.php', 'finance.php'];
+
+            $moduleRoles = config('roles.modules', []);
+
             foreach (glob(__DIR__.'/modules/*.php') as $moduleRoutes) {
-                if (in_array(basename($moduleRoutes), $centralModules, true)) {
+                $basename = basename($moduleRoutes);
+
+                if (in_array($basename, $centralModules, true) || in_array($basename, $rbacExcluded, true)) {
                     continue;
                 }
 
-                require $moduleRoutes;
+                // Dot notation breaks keys like "parent-portal.php" (parsed as parent-portal → php).
+                $allowedRoles = $moduleRoles[$basename] ?? ['admin'];
+
+                if ($allowedRoles === null) {
+                    require $moduleRoutes;
+
+                    continue;
+                }
+
+                Route::middleware('role:'.implode(',', $allowedRoles))->group(function () use ($moduleRoutes) {
+                    require $moduleRoutes;
+                });
             }
+
+            require __DIR__.'/modules/academics.php';
+            require __DIR__.'/modules/finance.php';
         });
 
         Route::fallback(fn () => redirect(TenancyUrl::centralUrl('/')));

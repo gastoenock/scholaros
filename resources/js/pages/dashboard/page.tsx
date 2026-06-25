@@ -43,6 +43,7 @@ type PageProps = {
   recentAdmissions: RecentAdmission[];
   schools: School[];
   applications: SchoolApplicationRow[];
+  view?: "platform" | "admin" | "setup";
 };
 
 function SetupPrompt() {
@@ -277,13 +278,20 @@ function SuperAdminDashboard({ schools, applications }: { schools: School[]; app
   );
 }
 
-function DashboardInner({ school, stats, recentAdmissions, schools, applications }: PageProps) {
+function DashboardInner({
+  school,
+  stats,
+  recentAdmissions,
+  schools,
+  applications,
+  view = "admin",
+}: PageProps) {
   const { user, schoolId } = useCurrentSchool();
   const { platform, tenancyHost } = usePage<SharedPageProps>().props;
   const isPlatformAdmin = platform?.isPlatformAdmin ?? false;
   const managingTenant = isPlatformAdmin && (!!platform?.manageTenantId || tenancyHost?.isTenant);
 
-  if (isPlatformAdmin && !managingTenant) {
+  if (view === "platform" || (isPlatformAdmin && !managingTenant)) {
     return <SuperAdminDashboard schools={schools} applications={applications} />;
   }
 

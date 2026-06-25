@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { router, usePage } from "@inertiajs/react";
 import { DashboardLayout } from "../../_components/layout.tsx";
 import { Button } from "@/components/ui/button.tsx";
@@ -17,6 +17,8 @@ import {
   type SharedWithCalendar,
 } from "@/lib/academic-calendar.ts";
 import { FileBarChart, FileSpreadsheet, FileText, Printer } from "lucide-react";
+import { RichTextEditor, RichTextContent, isRichTextEmpty } from "@/components/rich-text-editor.tsx";
+import { toast } from "sonner";
 
 type StudentOption = { id: number; firstName: string; lastName: string; studentId: string; gradeLevel?: string | null; classSection?: string | null };
 type ClassOption = { id: number; name: string; gradeLevel: string; section?: string | null };
@@ -42,46 +44,83 @@ type PageProps = {
   filters: ReportFilters;
 };
 
-function ReportPreview({ report }: { report: Record<string, unknown> }) {
+function ReportPreview({ report, onSaveComment, commentDraft, setCommentDraft, savingComment }: {
+  report: Record<string, unknown>;
+  onSaveComment?: () => void;
+  commentDraft?: string;
+  setCommentDraft?: (value: string) => void;
+  savingComment?: boolean;
+}) {
   const type = report.type as string;
   const period = report.period as { label?: string };
   const summary = report.summary as Record<string, unknown> | undefined;
 
   if (type === "student") {
     const student = report.student as { name: string; studentId: string; gradeLevel?: string; classSection?: string };
+    const classTeacher = report.classTeacher as { name?: string } | null;
     const rows = report.rows as Array<Record<string, unknown>>;
     return (
       <div className="space-y-4">
         <div>
           <h2 className="text-xl font-bold">{student.name}</h2>
           <p className="text-sm text-muted-foreground">{student.studentId} · {student.gradeLevel} {student.classSection}</p>
+          {classTeacher?.name && (
+            <p className="text-sm text-muted-foreground mt-1">Class Teacher: {classTeacher.name}</p>
+          )}
           <p className="text-sm text-muted-foreground mt-1">{period.label}</p>
         </div>
         {summary && (
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <Stat label="Exams Taken" value={summary.examsTaken} />
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+            <Stat label="Subjects" value={summary.subjectsTotal ?? rows.length} />
+            <Stat label="Scored" value={summary.examsTaken} />
             <Stat label="Average" value={summary.averageScore != null ? `${summary.averageScore}%` : "—"} />
             <Stat label="Passed" value={summary.passed} />
             <Stat label="Failed" value={summary.failed} />
           </div>
         )}
         <ResultsTable
-          headers={["Exam", "Subject", "Class", "Term", "Score", "Grade", "Status"]}
+          headers={["Subject", "Exam", "Score", "Grade", "Status"]}
           rows={rows.map((row) => [
-            row.title, row.subject, row.className, row.term,
-            row.score != null ? `${row.score}/${row.maxScore}` : "—",
+            row.subject,
+            row.title ?? (row.hasExam ? "—" : "No exam scheduled"),
+            row.score != null ? `${row.score}/${row.maxScore ?? "—"}` : "—",
             row.grade ?? "—",
             row.passed == null ? "—" : row.passed ? "Pass" : "Fail",
           ])}
         />
+        <div className="space-y-2 print:hidden">
+          <Label>Class Teacher Comment</Label>
+          <RichTextEditor
+            value={commentDraft ?? (report.classTeacherComment as string | undefined) ?? ""}
+            onChange={(value) => setCommentDraft?.(value)}
+            placeholder="General remarks about the student's performance, conduct, and progress..."
+          />
+          {onSaveComment && (
+            <Button onClick={onSaveComment} disabled={savingComment} className="cursor-pointer">
+              {savingComment ? "Saving..." : "Save Comment"}
+            </Button>
+          )}
+        </div>
+        {!isRichTextEmpty(commentDraft ?? (report.classTeacherComment as string | undefined)) && (
+          <div className="hidden print:block space-y-1">
+            <h3 className="font-semibold">Class Teacher Comment</h3>
+            <RichTextContent html={commentDraft ?? (report.classTeacherComment as string)} />
+          </div>
+        )}
       </div>
     );
   }
 
   if (type === "class") {
     const cls = report.class as { name: string; gradeLevel: string; section?: string };
-    const students = report.students as Array<{ name: string; studentNumber: string; averageScore?: number | null; examsTaken?: number }>;
-    const exams = report.exams as Array<{ title: string; subject?: string }>;
+    const subjects = (report.subjects as Array<{ id: number; name: string; code?: string }>) ?? [];
+    const subjectNames = (summary?.subjects as string[] | undefined) ?? subjects.map((s) => s.name);
+    const students = report.students as Array<{
+      name: string;
+      studentNumber: string;
+      subjectResults?: Array<{ subject: string; score?: number | null; grade?: string | null; maxScore?: number | null }>;
+      averageScore?: number | null;
+    }>;
     return (
       <div className="space-y-4">
         <div>
@@ -89,16 +128,27 @@ function ReportPreview({ report }: { report: Record<string, unknown> }) {
           <p className="text-sm text-muted-foreground">{period.label}</p>
         </div>
         {summary && (
-          <div className="grid grid-cols-3 gap-3">
-            <Stat label="Students" value={summary.studentCount} />
-            <Stat label="Exams" value={summary.examCount} />
-            <Stat label="Class Average" value={summary.classAverage != null ? `${summary.classAverage}%` : "—"} />
-          </div>
+          <>
+            <div className="grid grid-cols-2 gap-3">
+              <Stat label="Students" value={summary.studentCount} />
+              <Stat label="Class Average" value={summary.classAverage != null ? `${summary.classAverage}%` : "—"} />
+            </div>
+            <p className="text-sm text-muted-foreground">
+              <span className="font-medium text-foreground">Subjects: </span>
+              {subjectNames.join(", ") || "—"}
+            </p>
+          </>
         )}
-        <div className="text-sm text-muted-foreground">Exams: {exams.map((e) => e.title).join(", ") || "None"}</div>
         <ResultsTable
-          headers={["Student", "ID", "Exams Taken", "Average"]}
-          rows={students.map((s) => [s.name, s.studentNumber, s.examsTaken ?? 0, s.averageScore != null ? `${s.averageScore}%` : "—"])}
+          headers={["Student", "ID", ...subjects.map((s) => s.name), "Average"]}
+          rows={students.map((s) => [
+            s.name,
+            s.studentNumber,
+            ...(s.subjectResults ?? []).map((r) =>
+              r.score != null ? `${r.score}/${r.maxScore ?? "—"}` : "—",
+            ),
+            s.averageScore != null ? `${s.averageScore}%` : "—",
+          ])}
         />
       </div>
     );
@@ -146,7 +196,8 @@ function ReportPreview({ report }: { report: Record<string, unknown> }) {
         <p className="text-sm text-muted-foreground">{period.label}</p>
       </div>
       {summary && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+          <Stat label="Total Subjects" value={summary.totalSubjects ?? bySubject.length} />
           <Stat label="Total Exams" value={summary.totalExams} />
           <Stat label="Total Results" value={summary.totalResults} />
           <Stat label="School Average" value={summary.schoolAverage != null ? `${summary.schoolAverage}%` : "—"} />
@@ -206,6 +257,14 @@ function ReportsContent({ classes, students, subjects, report, filters }: PagePr
   const [studentId, setStudentId] = useState<string>(filters.studentId ? String(filters.studentId) : "");
   const [classId, setClassId] = useState<string>(filters.classId ? String(filters.classId) : "");
   const [subjectId, setSubjectId] = useState<string>(filters.subjectId ? String(filters.subjectId) : "");
+  const [commentDraft, setCommentDraft] = useState("");
+  const [savingComment, setSavingComment] = useState(false);
+
+  useEffect(() => {
+    if (report?.type === "student") {
+      setCommentDraft((report.classTeacherComment as string | undefined) ?? "");
+    }
+  }, [report]);
 
   const generate = () => {
     router.get("/dashboard/academics/reports", {
@@ -218,6 +277,23 @@ function ReportsContent({ classes, students, subjects, report, filters }: PagePr
       classId: classId || undefined,
       subjectId: subjectId || undefined,
     }, { preserveScroll: true });
+  };
+
+  const saveComment = () => {
+    if (!studentId || !yearId) return;
+    setSavingComment(true);
+    router.post("/dashboard/academics/reports/student-comment", {
+      studentId: parseInt(studentId, 10),
+      yearId,
+      semesterId: semesterId ?? undefined,
+      termId: termId ?? undefined,
+      comment: isRichTextEmpty(commentDraft) ? undefined : commentDraft,
+    }, {
+      preserveScroll: true,
+      onSuccess: () => toast.success("Comment saved"),
+      onError: () => toast.error("Failed to save comment"),
+      onFinish: () => setSavingComment(false),
+    });
   };
 
   const exportReport = (format: "pdf" | "xlsx" | "docx") => {
@@ -344,7 +420,13 @@ function ReportsContent({ classes, students, subjects, report, filters }: PagePr
       {report && (
         <Card id="report-preview">
           <CardContent className="pt-6">
-            <ReportPreview report={report} />
+            <ReportPreview
+              report={report}
+              commentDraft={commentDraft}
+              setCommentDraft={setCommentDraft}
+              onSaveComment={report.type === "student" && studentId ? saveComment : undefined}
+              savingComment={savingComment}
+            />
           </CardContent>
         </Card>
       )}

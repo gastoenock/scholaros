@@ -2,7 +2,7 @@ export type AuthUser = {
   id: number;
   name: string;
   email: string;
-  role?: "superadmin" | "landlord" | "admin" | "teacher" | "student" | "parent" | null;
+  role?: "superadmin" | "landlord" | "admin" | "teacher" | "student" | "parent" | "admin_staff" | "principal" | "vice_principal" | null;
   accountType?: "platform" | "tenant";
   schoolId?: number | null;
   avatar?: string | null;
@@ -19,7 +19,10 @@ export type PlatformTenant = {
 };
 
 export type SharedPageProps = {
-  auth: { user: AuthUser | null };
+  auth: {
+    user: AuthUser | null;
+    permissions: string[];
+  };
   platform: {
     isPlatformAdmin: boolean;
     manageTenantId: number | null;

@@ -12,6 +12,7 @@ use App\Models\Student;
 use App\Models\Subject;
 use App\Models\Submission;
 use App\Services\ExamResultService;
+use App\Support\RoleAccess;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
@@ -74,11 +75,13 @@ class AcademicsController extends Controller
             'students' => $students->values(),
             'school' => $this->school(),
             'canUploadExamResults' => $this->examResults->canManageResults($request->user()),
+            'canManage' => RoleAccess::can($request->user(), 'academics.manage'),
         ]);
     }
 
     public function storeSubject(Request $request): RedirectResponse
     {
+        $this->assertCanManageAcademics();
         $schoolId = $this->schoolId();
         abort_unless($schoolId, 403);
 
@@ -103,6 +106,7 @@ class AcademicsController extends Controller
 
     public function updateSubject(Request $request, Subject $subject): RedirectResponse
     {
+        $this->assertCanManageAcademics();
         abort_unless($subject->school_id === $this->schoolId(), 403);
 
         $validated = $request->validate([
@@ -132,6 +136,7 @@ class AcademicsController extends Controller
 
     public function destroySubject(Subject $subject): RedirectResponse
     {
+        $this->assertCanManageAcademics();
         abort_unless($subject->school_id === $this->schoolId(), 403);
 
         $subject->delete();
@@ -141,6 +146,7 @@ class AcademicsController extends Controller
 
     public function storeAssignment(Request $request): RedirectResponse
     {
+        $this->assertCanManageAcademics();
         $schoolId = $this->schoolId();
         abort_unless($schoolId, 403);
 
@@ -170,6 +176,7 @@ class AcademicsController extends Controller
 
     public function updateAssignment(Request $request, Assignment $assignment): RedirectResponse
     {
+        $this->assertCanManageAcademics();
         abort_unless($assignment->school_id === $this->schoolId(), 403);
 
         $validated = $request->validate([
@@ -186,6 +193,7 @@ class AcademicsController extends Controller
 
     public function destroyAssignment(Assignment $assignment): RedirectResponse
     {
+        $this->assertCanManageAcademics();
         abort_unless($assignment->school_id === $this->schoolId(), 403);
 
         $assignment->delete();
@@ -195,6 +203,7 @@ class AcademicsController extends Controller
 
     public function gradeSubmission(Request $request, Submission $submission): RedirectResponse
     {
+        $this->assertCanManageAcademics();
         abort_unless($submission->school_id === $this->schoolId(), 403);
 
         $validated = $request->validate([
@@ -213,6 +222,7 @@ class AcademicsController extends Controller
 
     public function storeExam(Request $request): RedirectResponse
     {
+        $this->assertCanManageAcademics();
         $schoolId = $this->schoolId();
         abort_unless($schoolId, 403);
 
@@ -244,6 +254,7 @@ class AcademicsController extends Controller
 
     public function updateExam(Request $request, Exam $exam): RedirectResponse
     {
+        $this->assertCanManageAcademics();
         abort_unless($exam->school_id === $this->schoolId(), 403);
 
         $validated = $request->validate([
@@ -277,6 +288,7 @@ class AcademicsController extends Controller
 
     public function destroyExam(Exam $exam): RedirectResponse
     {
+        $this->assertCanManageAcademics();
         abort_unless($exam->school_id === $this->schoolId(), 403);
 
         $exam->delete();
@@ -364,6 +376,7 @@ class AcademicsController extends Controller
 
     public function storeOnlineClass(Request $request): RedirectResponse
     {
+        $this->assertCanManageAcademics();
         $schoolId = $this->schoolId();
         abort_unless($schoolId, 403);
 
@@ -393,6 +406,7 @@ class AcademicsController extends Controller
 
     public function updateOnlineClass(Request $request, OnlineClass $onlineClass): RedirectResponse
     {
+        $this->assertCanManageAcademics();
         abort_unless($onlineClass->school_id === $this->schoolId(), 403);
 
         $validated = $request->validate([
@@ -412,6 +426,7 @@ class AcademicsController extends Controller
 
     public function destroyOnlineClass(OnlineClass $onlineClass): RedirectResponse
     {
+        $this->assertCanManageAcademics();
         abort_unless($onlineClass->school_id === $this->schoolId(), 403);
 
         $onlineClass->delete();
@@ -436,6 +451,12 @@ class AcademicsController extends Controller
             'students' => [],
             'school' => null,
             'canUploadExamResults' => false,
+            'canManage' => false,
         ];
+    }
+
+    private function assertCanManageAcademics(): void
+    {
+        abort_unless(RoleAccess::can(auth()->user(), 'academics.manage'), 403);
     }
 }

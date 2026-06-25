@@ -16,6 +16,7 @@ import { routerDeleteWithConfirm } from "@/lib/confirm.ts";
 import { motion } from "motion/react";
 import { Library, Plus, Search, BookOpen, ArrowLeftRight, CheckCircle2, AlertCircle, Trash2 } from "lucide-react";
 import { format, differenceInDays } from "date-fns";
+import { usePermissions } from "@/hooks/use-permissions.ts";
 
 type Book = {
   id: number;
@@ -67,10 +68,11 @@ type PageProps = {
   issuances: Issuance[];
   students: StudentOption[];
   staff: StaffOption[];
+  canManage?: boolean;
 };
 
 // ─── Book Catalog ─────────────────────────────────────────────
-function BookCatalog({ books: allBooks, students, staff }: { books: Book[]; students: StudentOption[]; staff: StaffOption[] }) {
+function BookCatalog({ books: allBooks, students, staff, canManage }: { books: Book[]; students: StudentOption[]; staff: StaffOption[]; canManage: boolean }) {
   const [open, setOpen] = useState(false);
   const [issueOpen, setIssueOpen] = useState(false);
   const [selectedBook, setSelectedBook] = useState<Book | null>(null);
@@ -142,7 +144,9 @@ function BookCatalog({ books: allBooks, students, staff }: { books: Book[]; stud
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search books, authors, ISBN…" className="pl-9" />
         </div>
+        {canManage && (
         <Button size="sm" onClick={() => setOpen(true)} className="cursor-pointer"><Plus className="h-4 w-4 mr-1.5" />Add Book</Button>
+        )}
       </div>
 
       {books.length === 0 ? (
@@ -158,12 +162,14 @@ function BookCatalog({ books: allBooks, students, staff }: { books: Book[]; stud
                       <p className="font-bold text-sm truncate">{b.title}</p>
                       <p className="text-xs text-muted-foreground">{b.author}</p>
                     </div>
+                    {canManage && (
                     <div className="flex gap-1.5 ml-2 shrink-0">
                       <button onClick={() => { setSelectedBook(b); setIssueOpen(true); }} className="p-1.5 rounded hover:bg-primary/10 text-primary cursor-pointer" title="Issue Book">
                         <ArrowLeftRight className="h-3.5 w-3.5" />
                       </button>
                       <button onClick={() => void routerDeleteWithConfirm(`/dashboard/library/books/${b.id}`, { title: "Delete this book?", onError: () => toast.error("Failed to remove book") })} className="p-1.5 rounded hover:bg-red-50 hover:text-red-600 cursor-pointer" title="Delete Book"><Trash2 className="h-3.5 w-3.5" /></button>
                     </div>
+                    )}
                   </div>
                   <div className="flex flex-wrap gap-1.5 mb-2">
                     {b.category && <Badge variant="secondary" className="text-xs">{b.category}</Badge>}
@@ -254,7 +260,7 @@ function BookCatalog({ books: allBooks, students, staff }: { books: Book[]; stud
 }
 
 // ─── Issuances / Returns ──────────────────────────────────────
-function IssuancesTab({ issuances: allIssuances, books }: { issuances: Issuance[]; books: Book[] }) {
+function IssuancesTab({ issuances: allIssuances, books, canManage }: { issuances: Issuance[]; books: Book[]; canManage: boolean }) {
   const [filter, setFilter] = useState("all");
 
   const issuances = useMemo(
@@ -324,7 +330,7 @@ function IssuancesTab({ issuances: allIssuances, books }: { issuances: Issuance[
                           </Badge>
                         </td>
                         <td className="px-4 py-3">
-                          {i.status === "issued" && (
+                          {canManage && i.status === "issued" && (
                             <Button size="sm" variant="secondary" onClick={() => handleReturn(i.id)} className="cursor-pointer">
                               <CheckCircle2 className="h-3.5 w-3.5 mr-1" />Return
                             </Button>
@@ -343,8 +349,11 @@ function IssuancesTab({ issuances: allIssuances, books }: { issuances: Issuance[
   );
 }
 
-function LibraryInner({ books, issuances, students, staff }: PageProps) {
+function LibraryInner(props: PageProps) {
   const { schoolId } = useCurrentSchool();
+  const { can } = usePermissions();
+  const canManage = props.canManage ?? can("library.manage");
+  const { books, issuances, students, staff } = props;
 
   if (!schoolId) return <div className="text-center py-20 text-muted-foreground">No school linked.</div>;
 
@@ -383,8 +392,8 @@ function LibraryInner({ books, issuances, students, staff }: PageProps) {
           <TabsTrigger value="catalog" className="cursor-pointer"><BookOpen className="h-3.5 w-3.5 mr-1.5" />Catalog</TabsTrigger>
           <TabsTrigger value="issuances" className="cursor-pointer"><ArrowLeftRight className="h-3.5 w-3.5 mr-1.5" />Issuances</TabsTrigger>
         </TabsList>
-        <TabsContent value="catalog" className="mt-4"><BookCatalog books={books} students={students} staff={staff} /></TabsContent>
-        <TabsContent value="issuances" className="mt-4"><IssuancesTab issuances={issuances} books={books} /></TabsContent>
+        <TabsContent value="catalog" className="mt-4"><BookCatalog books={books} students={students} staff={staff} canManage={canManage} /></TabsContent>
+        <TabsContent value="issuances" className="mt-4"><IssuancesTab issuances={issuances} books={books} canManage={canManage} /></TabsContent>
       </Tabs>
     </div>
   );

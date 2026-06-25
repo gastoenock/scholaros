@@ -6,6 +6,8 @@ use App\Models\SchoolClass;
 use App\Models\Student;
 use App\Models\Subject;
 use App\Services\AcademicReportExportService;
+use App\Services\AcademicReportService;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
@@ -16,6 +18,7 @@ class AcademicReportController extends Controller
 {
     public function __construct(
         private AcademicReportExportService $exports,
+        private AcademicReportService $reports,
     ) {}
 
     public function index(Request $request): Response
@@ -52,6 +55,30 @@ class AcademicReportController extends Controller
                 'generate' => $request->boolean('generate'),
             ],
         ]);
+    }
+
+    public function saveStudentComment(Request $request): RedirectResponse
+    {
+        $schoolId = $this->requireTenancy();
+
+        $validated = $request->validate([
+            'studentId' => ['required', 'integer', 'exists:students,id'],
+            'yearId' => ['required', 'integer'],
+            'semesterId' => ['nullable', 'integer'],
+            'termId' => ['nullable', 'integer'],
+            'comment' => ['nullable', 'string', 'max:5000'],
+        ]);
+
+        $this->reports->saveStudentComment(
+            $schoolId,
+            $validated['studentId'],
+            $validated['yearId'],
+            $validated['semesterId'] ?? null,
+            $validated['termId'] ?? null,
+            $validated['comment'] ?? null,
+        );
+
+        return back()->with('success', 'Class teacher comment saved');
     }
 
     public function export(Request $request): StreamedResponse

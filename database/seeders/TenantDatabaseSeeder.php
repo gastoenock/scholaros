@@ -34,6 +34,8 @@ class TenantDatabaseSeeder extends Seeder
 
             $this->seedInventoryAssets($schoolId, $vendorIds);
         }
+
+        $this->call(ExaminationResultsSeeder::class);
     }
 
     private function vendorGroupKey(string $name): ?string

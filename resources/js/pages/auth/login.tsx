@@ -1,5 +1,5 @@
 import { Head, Link, useForm } from "@inertiajs/react";
-import { GraduationCap, Loader2 } from "lucide-react";
+import { GraduationCap, Loader2, Users, BookOpen, UserCheck } from "lucide-react";
 import { Button } from "@/components/ui/button.tsx";
 import { Input } from "@/components/ui/input.tsx";
 import { Label } from "@/components/ui/label.tsx";
@@ -11,18 +11,29 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card.tsx";
+import { cn } from "@/lib/utils.ts";
+
+type Portal = "staff" | "parent" | "student";
 
 type PageProps = {
   school: { name: string; slug: string } | null;
   platformLoginUrl: string;
   centralDomain: string;
+  signupUrl: string;
 };
 
-export default function LoginPage({ school, platformLoginUrl, centralDomain }: PageProps) {
+const portals: { id: Portal; label: string; description: string; icon: typeof Users }[] = [
+  { id: "staff", label: "Staff & Admin", description: "Teachers and school administrators", icon: Users },
+  { id: "parent", label: "Parent", description: "View your children's progress", icon: UserCheck },
+  { id: "student", label: "Student", description: "Classes, results, and assignments", icon: BookOpen },
+];
+
+export default function LoginPage({ school, platformLoginUrl, centralDomain, signupUrl }: PageProps) {
   const { data, setData, post, processing, errors } = useForm({
     email: "",
     password: "",
     remember: false,
+    portal: "staff" as Portal,
   });
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -45,11 +56,36 @@ export default function LoginPage({ school, platformLoginUrl, centralDomain }: P
           <CardTitle>{school ? school.name : "School sign in"}</CardTitle>
           <CardDescription>
             {school
-              ? `Sign in to ${school.slug}.${centralDomain}`
-              : "Sign in with your school account."}
+              ? `Choose how you sign in to ${school.slug}.${centralDomain}`
+              : "Choose your portal and sign in."}
           </CardDescription>
         </CardHeader>
         <CardContent>
+          <div className="grid grid-cols-3 gap-2 mb-6">
+            {portals.map((portal) => (
+              <button
+                key={portal.id}
+                type="button"
+                onClick={() => setData("portal", portal.id)}
+                className={cn(
+                  "flex flex-col items-center gap-1.5 p-3 rounded-lg border text-center cursor-pointer transition-colors",
+                  data.portal === portal.id
+                    ? "border-primary bg-primary/5 text-primary"
+                    : "border-border hover:bg-muted/50",
+                )}
+              >
+                <portal.icon className="h-5 w-5" />
+                <span className="text-xs font-semibold leading-tight">{portal.label}</span>
+              </button>
+            ))}
+          </div>
+          <p className="text-xs text-muted-foreground mb-4 text-center">
+            {portals.find((p) => p.id === data.portal)?.description}
+          </p>
+          {errors.portal && (
+            <p className="text-destructive text-xs mb-3 text-center">{errors.portal}</p>
+          )}
+
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <Label className="mb-1.5 block" htmlFor="email">Email</Label>
@@ -97,12 +133,21 @@ export default function LoginPage({ school, platformLoginUrl, centralDomain }: P
           </form>
 
           <div className="mt-6 text-center text-sm text-muted-foreground space-y-2">
-            <p>
-              Don&apos;t have an account?{" "}
-              <Link href="/signup" className="text-primary font-medium hover:underline">
-                Create one
-              </Link>
-            </p>
+            {data.portal === "parent" && (
+              <p>
+                Don&apos;t have an account?{" "}
+                <Link href={signupUrl} className="text-primary font-medium hover:underline">
+                  Register as parent
+                </Link>
+              </p>
+            )}
+            {data.portal !== "parent" && (
+              <p className="text-xs">
+                {data.portal === "student"
+                  ? "Student accounts are created by your school."
+                  : "Staff accounts are provisioned by your school administrator."}
+              </p>
+            )}
             <p>
               Platform administrator?{" "}
               <a href={platformLoginUrl} className="text-primary font-medium hover:underline">

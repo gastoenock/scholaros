@@ -24,6 +24,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->alias([
             'tenant' => \App\Http\Middleware\EnsureTenancy::class,
             'central' => \App\Http\Middleware\EnsureCentralDomain::class,
+            'role' => \App\Http\Middleware\EnsureRole::class,
         ]);
 
         // Initialize tenancy before route model binding resolves tenant models.
@@ -41,7 +42,9 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
 
         $middleware->redirectGuestsTo('/login');
-        $middleware->redirectUsersTo('/dashboard');
+        $middleware->redirectUsersTo(function (Request $request) {
+            return \App\Support\RoleAccess::homePath($request->user());
+        });
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->shouldRenderJsonWhen(

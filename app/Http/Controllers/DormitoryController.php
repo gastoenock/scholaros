@@ -66,17 +66,30 @@ class DormitoryController extends Controller
         return back()->with('success', 'Room created');
     }
 
-    public function updateRoomStatus(Request $request, DormRoom $dormRoom): RedirectResponse
+    public function updateRoom(Request $request, DormRoom $dormRoom): RedirectResponse
     {
         abort_unless($dormRoom->school_id === $this->schoolId(), 403);
 
         $validated = $request->validate([
-            'status' => ['required', 'in:available,full,maintenance'],
+            'roomNumber' => ['sometimes', 'required', 'string', 'max:255'],
+            'dormBlock' => ['nullable', 'string', 'max:255'],
+            'floor' => ['nullable', 'integer'],
+            'capacity' => ['sometimes', 'required', 'integer', 'min:1'],
+            'type' => ['sometimes', 'required', 'in:single,double,triple,dormitory'],
+            'gender' => ['sometimes', 'required', 'in:male,female,mixed'],
+            'amenities' => ['nullable', 'array'],
+            'amenities.*' => ['string'],
+            'monthlyFee' => ['nullable', 'numeric'],
+            'status' => ['sometimes', 'required', 'in:available,full,maintenance'],
         ]);
 
-        $dormRoom->update(['status' => $validated['status']]);
+        $dormRoom->update($this->snakeKeys($validated));
 
-        return back()->with('success', 'Status updated');
+        if (isset($validated['capacity']) && $dormRoom->occupied_count >= $dormRoom->capacity && $dormRoom->status !== 'maintenance') {
+            $dormRoom->update(['status' => 'full']);
+        }
+
+        return back()->with('success', 'Hostel room updated');
     }
 
     public function destroyRoom(DormRoom $dormRoom): RedirectResponse
@@ -145,6 +158,97 @@ class DormitoryController extends Controller
                 'status' => 'available',
             ]);
         }
+
+        return back()->with('success', 'Checked out');
+    }
+
+    // ─── Maintenance ─────────────────────────────────────────────
+
+    public function storeMaintenance(Request $request): RedirectResponse
+    {
+        $schoolId = $this->schoolId();
+        abort_unless($schoolId, 403);
+
+        $validated = $request->validate([
+            'location' => ['required', 'string', 'max:255'],
+            'locationType' => ['required', 'string', 'max:255'],
+            'title' => ['required', 'string', 'max:255'],
+            'description' => ['required', 'string'],
+            'priority' => ['required', 'in:low,medium,high,urgent'],
+            'assignedTo' => ['nullable', 'string', 'max:255'],
+        ]);
+
+        MaintenanceRequest::create([
+            ...$this->snakeKeys($validated),
+            'school_id' => $schoolId,
+            'status' => 'open',
+        ]);
+
+        return back()->with('success', 'Maintenance request submitted');
+    }
+
+    public function updateMaintenance(Request $request, MaintenanceRequest $maintenanceRequest): RedirectResponse
+    {
+        abort_unless($maintenanceRequest->school_id === $this->schoolId(), 403);
+
+        $validated = $request->validate([
+            'status' => ['required', 'in:open,in_progress,resolved,closed'],
+        ]);
+
+        $payload = ['status' => $validated['status']];
+        if (in_array($validated['status'], ['resolved', 'closed'], true)) {
+            $payload['resolved_at'] = now()->toIso8601String();
+        }
+
+        $maintenanceRequest->update($payload);
+
+        return back()->with('success', 'Maintenance request updated');
+    }
+
+    public function destroyMaintenance(MaintenanceRequest $maintenanceRequest): RedirectResponse
+    {
+        abort_unless($maintenanceRequest->school_id === $this->schoolId(), 403);
+
+        $maintenanceRequest->delete();
+
+        return back()->with('success', 'Maintenance request deleted');
+    }
+
+    // ─── Security Logs ─────────────────────────────────────────────
+
+    public function storeSecurityLog(Request $request): RedirectResponse
+    {
+        $schoolId = $this->schoolId();
+        abort_unless($schoolId, 403);
+
+        $validated = $request->validate([
+            'personName' => ['required', 'string', 'max:255'],
+            'personType' => ['required', 'in:visitor,student,staff,vendor'],
+            'purpose' => ['nullable', 'string', 'max:255'],
+            'checkInTime' => ['required', 'string', 'max:255'],
+            'hostName' => ['nullable', 'string', 'max:255'],
+            'idType' => ['nullable', 'string', 'max:255'],
+            'idNumber' => ['nullable', 'string', 'max:255'],
+        ]);
+
+        SecurityLog::create([
+            ...$this->snakeKeys($validated),
+            'school_id' => $schoolId,
+            'logged_by' => auth()->id(),
+        ]);
+
+        return back()->with('success', 'Entry logged');
+    }
+
+    public function checkOutSecurityLog(Request $request, SecurityLog $securityLog): RedirectResponse
+    {
+        abort_unless($securityLog->school_id === $this->schoolId(), 403);
+
+        $validated = $request->validate([
+            'checkOutTime' => ['required', 'string', 'max:255'],
+        ]);
+
+        $securityLog->update(['check_out_time' => $validated['checkOutTime']]);
 
         return back()->with('success', 'Checked out');
     }

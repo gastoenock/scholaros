@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { Link, router, usePage } from "@inertiajs/react";
 import { DashboardLayout } from "../_components/layout.tsx";
 import { useCurrentSchool } from "../_components/use-current-school.ts";
@@ -47,6 +47,7 @@ export type Student = {
   uuid: string;
   schoolId: number;
   schoolBranchId?: number | null;
+  classId?: number | null;
   firstName: string;
   lastName: string;
   dateOfBirth?: string | null;
@@ -130,7 +131,7 @@ function StudentFormDialog({
     editStudent?.academicYearId ?? defaultYearId(academicCalendar),
   );
 
-  const { register, handleSubmit, control, setValue, formState: { errors, isSubmitting }, reset } =
+  const { register, handleSubmit, control, setValue, watch, formState: { errors, isSubmitting }, reset } =
     useForm<StudentFormData>({
       resolver: zodResolver(studentSchema),
       defaultValues: editStudent ? {
@@ -166,6 +167,9 @@ function StudentFormDialog({
     editStudent?.schoolBranchId ? String(editStudent.schoolBranchId) : "",
   );
 
+  const gender = watch("gender");
+  const gradeLevel = watch("gradeLevel");
+
   const onSubmit = (data: StudentFormData) =>
     new Promise<void>((resolve) => {
       const payload = {
@@ -187,7 +191,7 @@ function StudentFormDialog({
         onFinish: () => resolve(),
       };
       if (isEdit) {
-        router.put(`/dashboard/students/${editStudent.id}`, payload, options);
+        router.put(`/dashboard/students/${editStudent.uuid}`, payload, options);
       } else {
         router.post("/dashboard/students", payload, options);
       }
@@ -226,7 +230,7 @@ function StudentFormDialog({
                 </div>
                 <div>
                   <Label className="mb-1.5 block">Gender</Label>
-                  <Select onValueChange={(v) => setValue("gender", v as "male" | "female" | "other")}>
+                  <Select value={gender ?? ""} onValueChange={(v) => setValue("gender", v as "male" | "female" | "other")}>
                     <SelectTrigger><SelectValue placeholder="Select gender" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="male">Male</SelectItem>
@@ -274,7 +278,7 @@ function StudentFormDialog({
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <Label className="mb-1.5 block">Grade Level</Label>
-                  <Select onValueChange={(v) => setValue("gradeLevel", v)}>
+                  <Select value={gradeLevel ?? ""} onValueChange={(v) => setValue("gradeLevel", v)}>
                     <SelectTrigger><SelectValue placeholder="Select grade" /></SelectTrigger>
                     <SelectContent>
                       {GRADES.map((g) => <SelectItem key={g} value={g}>{g}</SelectItem>)}
@@ -377,6 +381,14 @@ function StudentsContent({ students, stats, school, branches }: PageProps) {
   const [addOpen, setAddOpen] = useState(false);
   const [editStudent, setEditStudent] = useState<Student | null>(null);
 
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const editUuid = params.get("edit");
+    if (!editUuid) return;
+    const student = students.find((s) => s.uuid === editUuid);
+    if (student) setEditStudent(student);
+  }, [students]);
+
   const branchList = branches.length > 0 ? branches : (school?.branches ?? []);
 
   const filteredStudents = useMemo(() => {
@@ -397,8 +409,8 @@ function StudentsContent({ students, stats, school, branches }: PageProps) {
     return result;
   }, [students, search, gradeFilter]);
 
-  const handleDelete = async (id: number) => {
-    await routerDeleteWithConfirm(`/dashboard/students/${id}`, {
+  const handleDelete = async (uuid: string) => {
+    await routerDeleteWithConfirm(`/dashboard/students/${uuid}`, {
       title: "Remove this student?",
       onSuccess: () => toast.success("Student removed"),
       onError: () => toast.error("Failed to remove student"),
@@ -532,7 +544,7 @@ function StudentsContent({ students, stats, school, branches }: PageProps) {
                         <Button variant="ghost" size="sm" className="h-7 w-7 p-0 cursor-pointer" onClick={() => setEditStudent(student)}>
                           <Pencil className="h-3.5 w-3.5" />
                         </Button>
-                        <Button variant="ghost" size="sm" className="h-7 w-7 p-0 cursor-pointer text-destructive hover:text-destructive" onClick={() => handleDelete(student.id)}>
+                        <Button variant="ghost" size="sm" className="h-7 w-7 p-0 cursor-pointer text-destructive hover:text-destructive" onClick={() => handleDelete(student.uuid)}>
                           <Trash2 className="h-3.5 w-3.5" />
                         </Button>
                       </div>

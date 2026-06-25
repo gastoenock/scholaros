@@ -7,6 +7,7 @@ use App\Models\Concerns\HasScholarOSRoles;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
@@ -32,5 +33,15 @@ class User extends Authenticatable
     public function isPlatformAdmin(): bool
     {
         return false;
+    }
+
+    public function staffProfile(): HasOne
+    {
+        return $this->hasOne(Staff::class);
+    }
+
+    public function studentProfile(): HasOne
+    {
+        return $this->hasOne(Student::class);
     }
 }

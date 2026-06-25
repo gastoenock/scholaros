@@ -31,6 +31,7 @@ type StaffRole = "teacher" | "admin_staff" | "support_staff" | "principal" | "vi
 
 export type StaffMember = {
   id: number;
+  uuid: string;
   schoolId: number;
   schoolBranchId?: number | null;
   userId?: number | null;
@@ -98,7 +99,7 @@ const roleColors: Record<string, string> = {
   vice_principal: "bg-amber-100 text-amber-600 border-amber-200",
 };
 
-function StaffFormDialog({
+export function StaffFormDialog({
   open,
   onClose,
   editStaff,

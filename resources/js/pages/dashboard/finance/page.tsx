@@ -12,6 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs.t
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog.tsx";
 import { toast } from "sonner";
 import { routerDeleteWithConfirm } from "@/lib/confirm.ts";
+import { usePermissions } from "@/hooks/use-permissions.ts";
 import { cn } from "@/lib/utils.ts";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from "recharts";
 import {
@@ -136,10 +137,25 @@ type PageProps = {
   feeStructures: FeeStructure[];
   students: StudentOption[];
   accounting: AccountingReport | null;
+  canManage?: boolean;
+  isParentView?: boolean;
 };
 
-function FinanceContent({ academicYear, reportAsOf, summary, payments, expenses, feeStructures, students, accounting }: PageProps) {
+function FinanceContent({
+  academicYear,
+  reportAsOf,
+  summary,
+  payments,
+  expenses,
+  feeStructures,
+  students,
+  accounting,
+  canManage: canManageProp,
+  isParentView = false,
+}: PageProps) {
   const { schoolId } = useCurrentSchool();
+  const { can } = usePermissions();
+  const canManage = canManageProp ?? can("finance.manage");
   const [tab, setTab] = useState("overview");
   const [reportTab, setReportTab] = useState("cash-book");
 
@@ -336,12 +352,17 @@ function FinanceContent({ academicYear, reportAsOf, summary, payments, expenses,
   }
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-2xl font-bold">Finance & Accounting</h1>
-          <p className="text-muted-foreground text-sm">Academic Year: {academicYear} · IFRS-aligned ledger · Reports as of {reportAsOf}</p>
+          <h1 className="text-2xl font-bold">{isParentView ? "Fee Status" : "Finance & Accounting"}</h1>
+          <p className="text-muted-foreground text-sm">
+            {isParentView
+              ? `Your children's fees · Academic Year ${academicYear}`
+              : `Academic Year: ${academicYear} · IFRS-aligned ledger · Reports as of ${reportAsOf}`}
+          </p>
         </div>
+        {canManage && (
         <div className="flex gap-2 flex-wrap">
           <Dialog open={feeStructureOpen} onOpenChange={setFeeStructureOpen}>
             <DialogTrigger asChild>
@@ -542,6 +563,7 @@ function FinanceContent({ academicYear, reportAsOf, summary, payments, expenses,
             </DialogContent>
           </Dialog>
         </div>
+        )}
       </div>
 
       {/* Summary Cards */}
@@ -599,9 +621,13 @@ function FinanceContent({ academicYear, reportAsOf, summary, payments, expenses,
         <TabsList>
           <TabsTrigger value="overview" className="cursor-pointer">Overview</TabsTrigger>
           <TabsTrigger value="payments" className="cursor-pointer">Payments</TabsTrigger>
-          <TabsTrigger value="expenses" className="cursor-pointer">Expenses</TabsTrigger>
-          <TabsTrigger value="fee-structures" className="cursor-pointer">Fee Structures</TabsTrigger>
-          <TabsTrigger value="accounting" className="cursor-pointer">Accounting</TabsTrigger>
+          {!isParentView && (
+            <>
+              <TabsTrigger value="expenses" className="cursor-pointer">Expenses</TabsTrigger>
+              <TabsTrigger value="fee-structures" className="cursor-pointer">Fee Structures</TabsTrigger>
+              <TabsTrigger value="accounting" className="cursor-pointer">Accounting</TabsTrigger>
+            </>
+          )}
         </TabsList>
 
         {/* Overview - Chart */}
@@ -672,11 +698,13 @@ function FinanceContent({ academicYear, reportAsOf, summary, payments, expenses,
                           <td className="py-2 pr-4">
                             <span className={cn("text-xs px-2 py-0.5 rounded-full font-medium capitalize", statusColor(p.status))}>{p.status}</span>
                           </td>
+                          {canManage && (
                           <td className="py-2">
                             <Button variant="ghost" size="icon" className="cursor-pointer h-7 w-7 text-destructive" onClick={() => void routerDeleteWithConfirm(`/dashboard/finance/payments/${p.id}`, { title: "Delete this payment?", onSuccess: () => toast.success("Deleted"), onError: () => toast.error("Failed to delete") })}>
                               <Trash2 className="h-3.5 w-3.5" />
                             </Button>
                           </td>
+                          )}
                         </tr>
                       ))}
                     </tbody>

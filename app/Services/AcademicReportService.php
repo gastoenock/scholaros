@@ -5,7 +5,9 @@ namespace App\Services;
 use App\Models\Exam;
 use App\Models\ExamResult;
 use App\Models\SchoolClass;
+use App\Models\Staff;
 use App\Models\Student;
+use App\Models\StudentReportComment;
 use App\Models\Subject;
 use Illuminate\Support\Collection;
 
@@ -22,32 +24,60 @@ class AcademicReportService
     {
         $student = Student::forSchool($schoolId)->findOrFail($studentId);
         $year = $this->calendar->resolveYear($schoolId, $yearId);
+        $schoolClass = $this->resolveStudentClass($schoolId, $student);
+        $subjects = $this->subjectsForClass($schoolId, $schoolClass, $year->id);
 
-        $exams = $this->examQuery($schoolId, $year->id, $semesterId, $termId)
+        $examQuery = $this->examQuery($schoolId, $year->id, $semesterId, $termId);
+        if ($schoolClass) {
+            $examQuery->where('class_id', $schoolClass->id);
+        }
+
+        $examsBySubject = $examQuery
             ->with(['subject', 'schoolClass', 'academicTerm', 'academicSemester', 'results' => fn ($q) => $q->where('student_id', $student->id)])
-            ->get();
+            ->get()
+            ->groupBy('subject_id');
 
-        $rows = $exams->map(function (Exam $exam) {
-            $result = $exam->results->first();
+        $rows = $subjects->map(function (Subject $subject) use ($examsBySubject, $schoolClass) {
+            $subjectExams = $examsBySubject->get($subject->id, collect());
+            $scoredResults = $subjectExams->flatMap(fn (Exam $exam) => $exam->results);
+
+            $avgScore = $scoredResults->count() ? round($scoredResults->avg('score'), 1) : null;
+            $latestExam = $subjectExams->sortByDesc('exam_date')->first();
+            $latestResult = $latestExam?->results->first();
+            $firstExam = $subjectExams->first();
+            $passingScore = $firstExam?->passing_score ?? 50;
 
             return [
-                'examId' => $exam->id,
-                'title' => $exam->title,
-                'subject' => $exam->subject?->name,
-                'className' => $exam->schoolClass?->name,
-                'term' => $exam->academicTerm?->name ?? $exam->term,
-                'semester' => $exam->academicSemester?->name,
-                'examDate' => $exam->exam_date,
-                'maxScore' => $exam->max_score,
-                'passingScore' => $exam->passing_score,
-                'score' => $result?->score,
-                'grade' => $result?->grade,
-                'remarks' => $result?->remarks,
-                'passed' => $result ? $result->score >= ($exam->passing_score ?? 50) : null,
+                'subjectId' => $subject->id,
+                'examId' => $firstExam?->id,
+                'title' => $subjectExams->count() === 1
+                    ? $firstExam?->title
+                    : ($subjectExams->count() > 1 ? "{$subjectExams->count()} exams" : null),
+                'subject' => $subject->name,
+                'className' => $schoolClass?->name,
+                'term' => $firstExam?->academicTerm?->name ?? $firstExam?->term,
+                'semester' => $firstExam?->academicSemester?->name,
+                'examDate' => $firstExam?->exam_date,
+                'maxScore' => $firstExam?->max_score,
+                'passingScore' => $passingScore,
+                'score' => $avgScore,
+                'grade' => $latestResult?->grade,
+                'remarks' => $latestResult?->remarks,
+                'passed' => $avgScore !== null ? $avgScore >= $passingScore : null,
+                'hasExam' => $subjectExams->isNotEmpty(),
             ];
         })->values();
 
         $scored = $rows->filter(fn ($row) => $row['score'] !== null);
+
+        $comment = StudentReportComment::query()
+            ->where('student_id', $student->id)
+            ->where('academic_year_id', $year->id)
+            ->when($semesterId, fn ($q) => $q->where('academic_semester_id', $semesterId), fn ($q) => $q->whereNull('academic_semester_id'))
+            ->when($termId, fn ($q) => $q->where('academic_term_id', $termId), fn ($q) => $q->whereNull('academic_term_id'))
+            ->first();
+
+        $classTeacher = $schoolClass?->classTeacher ?? ($schoolClass?->class_teacher_id ? Staff::find($schoolClass->class_teacher_id) : null);
 
         return [
             'type' => 'student',
@@ -59,8 +89,20 @@ class AcademicReportService
                 'gradeLevel' => $student->grade_level,
                 'classSection' => $student->class_section,
             ],
+            'class' => $schoolClass ? [
+                'id' => $schoolClass->id,
+                'name' => $schoolClass->name,
+                'gradeLevel' => $schoolClass->grade_level,
+                'section' => $schoolClass->section,
+            ] : null,
+            'classTeacher' => $classTeacher ? [
+                'id' => $classTeacher->id,
+                'name' => trim("{$classTeacher->first_name} {$classTeacher->last_name}"),
+            ] : null,
+            'classTeacherComment' => $comment?->comment,
             'rows' => $rows,
             'summary' => [
+                'subjectsTotal' => $rows->count(),
                 'examsTaken' => $scored->count(),
                 'averageScore' => $scored->count() ? round($scored->avg('score'), 1) : null,
                 'passed' => $scored->where('passed', true)->count(),
@@ -76,42 +118,52 @@ class AcademicReportService
     {
         $class = SchoolClass::forSchool($schoolId)->findOrFail($classId);
         $year = $this->calendar->resolveYear($schoolId, $yearId);
+        $subjects = $this->subjectsForClass($schoolId, $class, $year->id);
 
         $students = Student::forSchool($schoolId)
             ->when($class->school_branch_id, fn ($q) => $q->where('school_branch_id', $class->school_branch_id))
-            ->where('grade_level', $class->grade_level)
-            ->when($class->section, fn ($q) => $q->where('class_section', $class->section))
+            ->where('class_id', $class->id)
             ->orderBy('last_name')
             ->get();
 
         $exams = $this->examQuery($schoolId, $year->id, $semesterId, $termId)
             ->where('class_id', $class->id)
             ->with(['subject', 'results'])
-            ->get();
+            ->get()
+            ->groupBy('subject_id');
 
-        $studentRows = $students->map(function (Student $student) use ($exams) {
-            $results = $exams->map(function (Exam $exam) use ($student) {
-                $result = $exam->results->firstWhere('student_id', $student->id);
+        $subjectColumns = $subjects->map(fn (Subject $subject) => [
+            'id' => $subject->id,
+            'name' => $subject->name,
+            'code' => $subject->code,
+        ])->values();
+
+        $studentRows = $students->map(function (Student $student) use ($subjects, $exams) {
+            $subjectResults = $subjects->map(function (Subject $subject) use ($student, $exams) {
+                $subjectExams = $exams->get($subject->id, collect());
+                $firstExam = $subjectExams->first();
+                $result = $subjectExams
+                    ->flatMap(fn (Exam $exam) => $exam->results)
+                    ->firstWhere('student_id', $student->id);
 
                 return [
-                    'examId' => $exam->id,
-                    'examTitle' => $exam->title,
-                    'subject' => $exam->subject?->name,
+                    'subjectId' => $subject->id,
+                    'subject' => $subject->name,
                     'score' => $result?->score,
                     'grade' => $result?->grade,
-                    'maxScore' => $exam->max_score,
+                    'maxScore' => $firstExam?->max_score,
                 ];
             });
 
-            $scored = $results->filter(fn ($r) => $r['score'] !== null);
+            $scored = $subjectResults->filter(fn ($row) => $row['score'] !== null);
 
             return [
                 'studentId' => $student->id,
                 'studentNumber' => $student->student_id,
                 'name' => trim("{$student->first_name} {$student->last_name}"),
-                'results' => $results->values(),
+                'subjectResults' => $subjectResults->values(),
+                'results' => $subjectResults->values(),
                 'averageScore' => $scored->count() ? round($scored->avg('score'), 1) : null,
-                'examsTaken' => $scored->count(),
             ];
         })->values();
 
@@ -124,16 +176,12 @@ class AcademicReportService
                 'gradeLevel' => $class->grade_level,
                 'section' => $class->section,
             ],
-            'exams' => $exams->map(fn (Exam $exam) => [
-                'id' => $exam->id,
-                'title' => $exam->title,
-                'subject' => $exam->subject?->name,
-                'maxScore' => $exam->max_score,
-            ])->values(),
+            'subjects' => $subjectColumns,
             'students' => $studentRows,
             'summary' => [
                 'studentCount' => $students->count(),
-                'examCount' => $exams->count(),
+                'subjectCount' => $subjects->count(),
+                'subjects' => $subjects->pluck('name')->values()->all(),
                 'classAverage' => $this->averageFromStudentRows($studentRows),
             ],
         ];
@@ -227,13 +275,22 @@ class AcademicReportService
             ];
         })->values();
 
-        $bySubject = $exams->groupBy('subject_id')->map(function (Collection $subjectExams, $subjectId) {
-            $subject = $subjectExams->first()->subject;
+        $allSubjects = Subject::forSchool($schoolId)
+            ->where(function ($q) use ($year) {
+                $q->where('academic_year_id', $year->id)->orWhereNull('academic_year_id');
+            })
+            ->orderBy('name')
+            ->get();
+
+        $examsBySubject = $exams->groupBy('subject_id');
+
+        $bySubject = $allSubjects->map(function (Subject $subject) use ($examsBySubject) {
+            $subjectExams = $examsBySubject->get($subject->id, collect());
             $results = $subjectExams->flatMap(fn (Exam $e) => $e->results);
 
             return [
-                'subjectId' => (int) $subjectId,
-                'subjectName' => $subject?->name ?? 'Unknown',
+                'subjectId' => $subject->id,
+                'subjectName' => $subject->name,
                 'examCount' => $subjectExams->count(),
                 'resultsCount' => $results->count(),
                 'averageScore' => $results->count() ? round($results->avg('score'), 1) : null,
@@ -257,6 +314,7 @@ class AcademicReportService
             'type' => 'overall',
             'period' => $this->periodLabel($year->name, $semesterId, $termId),
             'summary' => [
+                'totalSubjects' => $allSubjects->count(),
                 'totalExams' => $exams->count(),
                 'totalResults' => $allResults->count(),
                 'schoolAverage' => $allResults->count() ? round($allResults->avg('score'), 1) : null,
@@ -268,6 +326,78 @@ class AcademicReportService
             'bySubject' => $bySubject,
             'byTerm' => $byTerm,
         ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function saveStudentComment(
+        int $schoolId,
+        int $studentId,
+        int $yearId,
+        ?int $semesterId,
+        ?int $termId,
+        ?string $comment,
+    ): array {
+        $student = Student::forSchool($schoolId)->findOrFail($studentId);
+        $schoolClass = $this->resolveStudentClass($schoolId, $student);
+
+        StudentReportComment::updateOrCreate(
+            [
+                'student_id' => $student->id,
+                'academic_year_id' => $yearId,
+                'academic_semester_id' => $semesterId,
+                'academic_term_id' => $termId,
+            ],
+            [
+                'comment' => $comment,
+                'class_teacher_id' => $schoolClass?->class_teacher_id,
+            ],
+        );
+
+        return ['saved' => true];
+    }
+
+    private function resolveStudentClass(int $schoolId, Student $student): ?SchoolClass
+    {
+        if ($student->class_id) {
+            return SchoolClass::forSchool($schoolId)->find($student->class_id);
+        }
+
+        return SchoolClass::forSchool($schoolId)
+            ->when($student->school_branch_id, fn ($q) => $q->where('school_branch_id', $student->school_branch_id))
+            ->where('grade_level', $student->grade_level)
+            ->when($student->class_section, fn ($q) => $q->where('section', $student->class_section))
+            ->first();
+    }
+
+    /**
+     * @return Collection<int, Subject>
+     */
+    private function subjectsForClass(int $schoolId, ?SchoolClass $class, int $yearId): Collection
+    {
+        if ($class) {
+            $class->loadMissing('subjects');
+
+            if ($class->subjects->isNotEmpty()) {
+                return $class->subjects->sortBy('name')->values();
+            }
+
+            return Subject::forSchool($schoolId)
+                ->where('grade_level', $class->grade_level)
+                ->where(function ($q) use ($yearId) {
+                    $q->where('academic_year_id', $yearId)->orWhereNull('academic_year_id');
+                })
+                ->orderBy('name')
+                ->get();
+        }
+
+        return Subject::forSchool($schoolId)
+            ->where(function ($q) use ($yearId) {
+                $q->where('academic_year_id', $yearId)->orWhereNull('academic_year_id');
+            })
+            ->orderBy('name')
+            ->get();
     }
 
     private function examQuery(int $schoolId, int $yearId, ?int $semesterId, ?int $termId)

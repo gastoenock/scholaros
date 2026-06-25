@@ -25,49 +25,76 @@
 @endphp
 
 @if ($type === 'student')
-    @php $student = $report['student']; @endphp
+    @php
+        $student = $report['student'];
+        $classTeacher = $report['classTeacher'] ?? null;
+    @endphp
     <h1>Student Examination Report</h1>
-    <p class="muted"><strong>{{ $student['name'] }}</strong> · {{ $student['studentId'] }} · {{ $student['gradeLevel'] }} {{ $student['classSection'] }}<br>{{ $period }}</p>
+    <p class="muted"><strong>{{ $student['name'] }}</strong> · {{ $student['studentId'] }} · {{ $student['gradeLevel'] }} {{ $student['classSection'] }}<br>
+    @if ($classTeacher['name'] ?? null)
+        Class Teacher: {{ $classTeacher['name'] }}<br>
+    @endif
+    {{ $period }}</p>
     <div class="stats">
-        <span><strong>Exams Taken:</strong> {{ $summary['examsTaken'] ?? 0 }}</span>
+        <span><strong>Subjects:</strong> {{ $summary['subjectsTotal'] ?? count($report['rows']) }}</span>
+        <span><strong>Scored:</strong> {{ $summary['examsTaken'] ?? 0 }}</span>
         <span><strong>Average:</strong> {{ $summary['averageScore'] ?? '—' }}%</span>
         <span><strong>Passed:</strong> {{ $summary['passed'] ?? 0 }}</span>
         <span><strong>Failed:</strong> {{ $summary['failed'] ?? 0 }}</span>
     </div>
     <table>
-        <thead><tr><th>Exam</th><th>Subject</th><th>Class</th><th>Term</th><th>Score</th><th>Grade</th><th>Status</th></tr></thead>
+        <thead><tr><th>Subject</th><th>Exam</th><th>Score</th><th>Grade</th><th>Status</th></tr></thead>
         <tbody>
         @foreach ($report['rows'] as $row)
             <tr>
-                <td>{{ $row['title'] }}</td>
                 <td>{{ $row['subject'] ?? '—' }}</td>
-                <td>{{ $row['className'] ?? '—' }}</td>
-                <td>{{ $row['term'] ?? '—' }}</td>
-                <td>{{ isset($row['score']) ? $row['score'].'/'.$row['maxScore'] : '—' }}</td>
+                <td>{{ $row['title'] ?? (($row['hasExam'] ?? false) ? '—' : 'No exam scheduled') }}</td>
+                <td>{{ isset($row['score']) ? $row['score'].'/'.($row['maxScore'] ?? '—') : '—' }}</td>
                 <td>{{ $row['grade'] ?? '—' }}</td>
                 <td>{{ $row['passed'] === null ? '—' : ($row['passed'] ? 'Pass' : 'Fail') }}</td>
             </tr>
         @endforeach
         </tbody>
     </table>
+    @if (! empty($report['classTeacherComment']))
+        <div class="section">
+            <h2>Class Teacher Comment</h2>
+            <p>{!! $report['classTeacherComment'] !!}</p>
+        </div>
+    @endif
 
 @elseif ($type === 'class')
-    @php $class = $report['class']; @endphp
+    @php
+        $class = $report['class'];
+        $subjects = $report['subjects'] ?? [];
+        $subjectNames = $summary['subjects'] ?? collect($subjects)->pluck('name')->all();
+    @endphp
     <h1>Class Examination Report — {{ $class['name'] }}</h1>
     <p class="muted">{{ $period }}</p>
     <div class="stats">
         <span><strong>Students:</strong> {{ $summary['studentCount'] ?? 0 }}</span>
-        <span><strong>Exams:</strong> {{ $summary['examCount'] ?? 0 }}</span>
+        <span><strong>Subjects:</strong> {{ implode(', ', $subjectNames) ?: '—' }}</span>
         <span><strong>Class Average:</strong> {{ $summary['classAverage'] ?? '—' }}%</span>
     </div>
     <table>
-        <thead><tr><th>Student</th><th>ID</th><th>Exams Taken</th><th>Average</th></tr></thead>
+        <thead>
+            <tr>
+                <th>Student</th>
+                <th>ID</th>
+                @foreach ($subjects as $subject)
+                    <th>{{ $subject['name'] }}</th>
+                @endforeach
+                <th>Average</th>
+            </tr>
+        </thead>
         <tbody>
         @foreach ($report['students'] as $student)
             <tr>
                 <td>{{ $student['name'] }}</td>
                 <td>{{ $student['studentNumber'] }}</td>
-                <td>{{ $student['examsTaken'] ?? 0 }}</td>
+                @foreach ($student['subjectResults'] ?? $student['results'] ?? [] as $result)
+                    <td>{{ isset($result['score']) ? $result['score'].'/'.($result['maxScore'] ?? '—') : '—' }}</td>
+                @endforeach
                 <td>{{ $student['averageScore'] ?? '—' }}%</td>
             </tr>
         @endforeach
@@ -102,6 +129,7 @@
     <h1>Overall Examinations Report</h1>
     <p class="muted">{{ $period }}</p>
     <div class="stats">
+        <span><strong>Total Subjects:</strong> {{ $summary['totalSubjects'] ?? count($report['bySubject'] ?? []) }}</span>
         <span><strong>Total Exams:</strong> {{ $summary['totalExams'] ?? 0 }}</span>
         <span><strong>Total Results:</strong> {{ $summary['totalResults'] ?? 0 }}</span>
         <span><strong>School Average:</strong> {{ $summary['schoolAverage'] ?? '—' }}%</span>

@@ -11,7 +11,9 @@ class ResolveAuthGuard
 {
     public function handle(Request $request, Closure $next): Response
     {
-        if (Auth::guard('platform')->check()) {
+        if (tenancy()->initialized && Auth::guard('web')->check()) {
+            Auth::shouldUse('web');
+        } elseif (Auth::guard('platform')->check()) {
             Auth::shouldUse('platform');
         } elseif (Auth::guard('web')->check()) {
             Auth::shouldUse('web');

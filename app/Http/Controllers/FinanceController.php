@@ -5,10 +5,12 @@ namespace App\Http\Controllers;
 use App\Models\Expense;
 use App\Models\FeePayment;
 use App\Models\FeeStructure;
+use App\Models\ParentStudentLink;
 use App\Models\PettyCashFund;
 use App\Models\Student;
 use App\Services\AccountingService;
 use App\Services\StudentFeeBalanceService;
+use App\Support\RoleAccess;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -74,32 +76,51 @@ class FinanceController extends Controller
             ->orderBy('last_name')
             ->get(['id', 'first_name', 'last_name', 'student_id', 'grade_level']);
 
-        $summary = $this->buildSummary($schoolId, $academicYear, $payments, $expenses);
+        $user = auth()->user();
+        $canManage = RoleAccess::can($user, 'finance.manage');
+        $isParentView = $user && RoleAccess::can($user, 'finance.view') && ! $canManage;
 
-        $yearPrefix = explode('-', $academicYear)[0];
-        $pettyCashFund = PettyCashFund::forSchool($schoolId)->first();
+        if ($isParentView) {
+            $linkedStudentIds = ParentStudentLink::where('parent_user_id', $user->id)->pluck('student_id');
+            $payments = $payments->whereIn('student_id', $linkedStudentIds)->values();
+            $students = $students->whereIn('id', $linkedStudentIds)->values();
+            $expenses = collect();
+            $feeStructures = collect();
+            $summary = $this->buildParentSummary($schoolId, $academicYear, $payments, $linkedStudentIds);
+            $accounting = null;
+        } else {
+            $summary = $this->buildSummary($schoolId, $academicYear, $payments, $expenses);
+
+            $yearPrefix = explode('-', $academicYear)[0];
+            $pettyCashFund = PettyCashFund::forSchool($schoolId)->first();
+
+            $accounting = [
+                'cashBook' => $this->accounting->cashBook($schoolId, "{$yearPrefix}-01-01", $reportAsOf),
+                'pettyCashBook' => $this->accounting->pettyCashBook($schoolId),
+                'trialBalance' => $this->accounting->trialBalance($schoolId, $reportAsOf),
+                'balanceSheet' => $this->accounting->balanceSheet($schoolId, $reportAsOf),
+                'pettyCashFund' => $pettyCashFund?->toArray(),
+            ];
+        }
 
         return Inertia::render('dashboard/finance/page', [
             'academicYear' => $academicYear,
             'reportAsOf' => $reportAsOf,
             'summary' => $summary,
             'payments' => $payments,
-            'expenses' => $expenses,
-            'feeStructures' => $feeStructures,
+            'expenses' => $isParentView ? [] : $expenses,
+            'feeStructures' => $isParentView ? [] : $feeStructures,
             'students' => $students,
-            'accounting' => [
-                'cashBook' => $this->accounting->cashBook($schoolId, "{$yearPrefix}-01-01", $reportAsOf),
-                'pettyCashBook' => $this->accounting->pettyCashBook($schoolId),
-                'trialBalance' => $this->accounting->trialBalance($schoolId, $reportAsOf),
-                'balanceSheet' => $this->accounting->balanceSheet($schoolId, $reportAsOf),
-                'pettyCashFund' => $pettyCashFund?->toArray(),
-            ],
+            'accounting' => $accounting ?? null,
+            'canManage' => $canManage,
+            'isParentView' => $isParentView,
         ]);
     }
 
     public function feeBalancePreview(Request $request): JsonResponse
     {
         $schoolId = $this->requireTenancy();
+        abort_unless(RoleAccess::can(auth()->user(), 'finance.manage'), 403);
 
         $validated = $request->validate([
             'studentId' => ['required', 'integer', 'exists:students,id'],
@@ -181,8 +202,38 @@ class FinanceController extends Controller
         ];
     }
 
+    /**
+     * @param  \Illuminate\Support\Collection<int, array<string, mixed>|FeePayment>  $payments
+     * @param  \Illuminate\Support\Collection<int, int>  $studentIds
+     * @return array<string, mixed>
+     */
+    private function buildParentSummary(int $schoolId, string $academicYear, $payments, $studentIds): array
+    {
+        $totalCollected = collect($payments)
+            ->whereIn('status', ['paid', 'partial', 'waived'])
+            ->sum(fn ($p) => is_array($p) ? $p['amount'] : $p->amount);
+
+        $totalOutstanding = 0;
+        foreach ($studentIds as $studentId) {
+            $student = Student::find($studentId);
+            if ($student) {
+                $totalOutstanding += $this->feeBalances->currentBalance($schoolId, $student, $academicYear)['balanceDue'];
+            }
+        }
+
+        return [
+            'totalIncome' => $totalCollected,
+            'totalExpenses' => 0,
+            'netBalance' => $totalCollected,
+            'totalCollected' => $totalCollected,
+            'totalOutstanding' => $totalOutstanding,
+            'byMonth' => [],
+        ];
+    }
+
     public function storeFeeStructure(Request $request): RedirectResponse
     {
+        abort_unless(RoleAccess::can(auth()->user(), 'finance.manage'), 403);
         $schoolId = $this->schoolId();
         abort_unless($schoolId, 403);
 
@@ -210,6 +261,7 @@ class FinanceController extends Controller
 
     public function destroyFeeStructure(FeeStructure $feeStructure): RedirectResponse
     {
+        abort_unless(RoleAccess::can(auth()->user(), 'finance.manage'), 403);
         abort_unless($feeStructure->school_id === $this->schoolId(), 403);
 
         $feeStructure->delete();
@@ -219,6 +271,7 @@ class FinanceController extends Controller
 
     public function storePayment(Request $request): RedirectResponse
     {
+        abort_unless(RoleAccess::can(auth()->user(), 'finance.manage'), 403);
         $schoolId = $this->schoolId();
         abort_unless($schoolId, 403);
 
@@ -274,6 +327,7 @@ class FinanceController extends Controller
 
     public function destroyPayment(FeePayment $feePayment): RedirectResponse
     {
+        abort_unless(RoleAccess::can(auth()->user(), 'finance.manage'), 403);
         abort_unless($feePayment->school_id === $this->schoolId(), 403);
 
         $feePayment->delete();
@@ -283,6 +337,7 @@ class FinanceController extends Controller
 
     public function storeExpense(Request $request): RedirectResponse
     {
+        abort_unless(RoleAccess::can(auth()->user(), 'finance.manage'), 403);
         $schoolId = $this->schoolId();
         abort_unless($schoolId, 403);
 
@@ -311,6 +366,7 @@ class FinanceController extends Controller
 
     public function updateExpenseStatus(Request $request, Expense $expense): RedirectResponse
     {
+        abort_unless(RoleAccess::can(auth()->user(), 'finance.manage'), 403);
         abort_unless($expense->school_id === $this->schoolId(), 403);
 
         $validated = $request->validate([
@@ -331,6 +387,7 @@ class FinanceController extends Controller
 
     public function destroyExpense(Expense $expense): RedirectResponse
     {
+        abort_unless(RoleAccess::can(auth()->user(), 'finance.manage'), 403);
         abort_unless($expense->school_id === $this->schoolId(), 403);
 
         $expense->delete();

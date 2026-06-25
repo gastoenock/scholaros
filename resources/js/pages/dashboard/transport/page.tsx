@@ -2,6 +2,8 @@ import { useMemo, useState } from "react";
 import { router } from "@inertiajs/react";
 import { DashboardLayout } from "../_components/layout.tsx";
 import { useCurrentSchool } from "../_components/use-current-school.ts";
+import { usePermissions } from "@/hooks/use-permissions.ts";
+import { ParentTransportView, type ChildTransportRow } from "./parent-view.tsx";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card.tsx";
 import { Button } from "@/components/ui/button.tsx";
 import { Input } from "@/components/ui/input.tsx";
@@ -120,6 +122,9 @@ type PageProps = {
   buses: BusRecord[];
   assignments: TransportAssignment[];
   students: StudentLite[];
+  children?: ChildTransportRow[];
+  canManage?: boolean;
+  isParentView?: boolean;
 };
 
 function getStudentAge(dateOfBirth?: string | null): number | null {
@@ -454,8 +459,18 @@ function StudentFilterFields({
   );
 }
 
-function TransportContent({ routes, buses, assignments, students }: PageProps) {
+function TransportContent(props: PageProps) {
+  if (props.isParentView) {
+    return <ParentTransportView childRows={props.children ?? []} buses={props.buses} />;
+  }
+
+  return <TransportAdminContent {...props} />;
+}
+
+function TransportAdminContent({ routes, buses, assignments, students, canManage: canManageProp }: PageProps) {
   const { schoolId } = useCurrentSchool();
+  const { can } = usePermissions();
+  const canManage = canManageProp ?? can("transport.manage");
   const [tab, setTab] = useState("buses");
   const [busOpen, setBusOpen] = useState(false);
   const [routeOpen, setRouteOpen] = useState(false);
@@ -824,12 +839,13 @@ function TransportContent({ routes, buses, assignments, students }: PageProps) {
   }
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-2xl font-bold">Transport Management</h1>
           <p className="text-muted-foreground text-sm">Bus routes, drivers, and GPS tracking</p>
         </div>
+        {canManage && (
         <div className="flex gap-2 flex-wrap">
           <Dialog open={routeOpen} onOpenChange={setRouteOpen}>
             <DialogTrigger asChild>
@@ -1094,6 +1110,7 @@ function TransportContent({ routes, buses, assignments, students }: PageProps) {
             </DialogContent>
           </Dialog>
         </div>
+        )}
       </div>
 
       {/* Stats */}
@@ -1153,6 +1170,8 @@ function TransportContent({ routes, buses, assignments, students }: PageProps) {
                       )}
                     </div>
                     <div className="flex gap-2 mt-3">
+                      {canManage && (
+                      <>
                       <Select value={bus.status} onValueChange={(v) => {
                         router.put(`/dashboard/transport/buses/${bus.id}`, { status: v }, {
                           preserveScroll: true,
@@ -1171,6 +1190,8 @@ function TransportContent({ routes, buses, assignments, students }: PageProps) {
                       <Button variant="ghost" size="icon" className="cursor-pointer h-7 w-7 text-destructive" onClick={() => void routerDeleteWithConfirm(`/dashboard/transport/buses/${bus.id}`, { title: "Delete this bus?", onSuccess: () => toast.success("Deleted"), onError: () => toast.error("Failed to delete") })}>
                         <Trash2 className="h-3.5 w-3.5" />
                       </Button>
+                      </>
+                      )}
                     </div>
                   </CardContent>
                 </Card>
@@ -1196,9 +1217,11 @@ function TransportContent({ routes, buses, assignments, students }: PageProps) {
                         <CardTitle className="text-base">{route.routeName}</CardTitle>
                         <p className="text-xs text-muted-foreground mt-0.5">#{route.routeNumber} · Morning: {route.morningStartTime ?? "—"} · Afternoon: {route.afternoonStartTime ?? "—"}</p>
                       </div>
+                      {canManage && (
                       <Button variant="ghost" size="icon" className="cursor-pointer h-7 w-7 text-destructive" onClick={() => void routerDeleteWithConfirm(`/dashboard/transport/routes/${route.id}`, { title: "Delete this route?", onSuccess: () => toast.success("Deleted"), onError: () => toast.error("Failed to delete") })}>
                         <Trash2 className="h-4 w-4" />
                       </Button>
+                      )}
                     </div>
                   </CardHeader>
                   <CardContent>
@@ -1275,9 +1298,11 @@ function TransportContent({ routes, buses, assignments, students }: PageProps) {
                       )}
                     </div>
                   </div>
+                  {canManage && (
                   <Button size="sm" variant="secondary" className="cursor-pointer text-xs h-7" onClick={() => handleSimulateGPS(bus.id, i)}>
                     <Navigation className="h-3 w-3 mr-1" />Ping
                   </Button>
+                  )}
                 </div>
               ))}
             </div>
@@ -1361,7 +1386,7 @@ function TransportContent({ routes, buses, assignments, students }: PageProps) {
                         <th className="text-left py-2 pr-4 font-medium text-muted-foreground">Pickup</th>
                         <th className="text-left py-2 pr-4 font-medium text-muted-foreground">Drop</th>
                         <th className="text-left py-2 pr-4 font-medium text-muted-foreground">Status</th>
-                        <th className="py-2"></th>
+                        {canManage && <th className="py-2"></th>}
                       </tr>
                     </thead>
                     <tbody>
@@ -1397,6 +1422,7 @@ function TransportContent({ routes, buses, assignments, students }: PageProps) {
                                 {a.isActive ? "Active" : "Inactive"}
                               </Badge>
                             </td>
+                            {canManage && (
                             <td className="py-2">
                               <div className="flex items-center justify-end gap-1">
                                 <Button variant="ghost" size="icon" className="cursor-pointer h-7 w-7" onClick={() => openEditAssignment(a)}>
@@ -1407,6 +1433,7 @@ function TransportContent({ routes, buses, assignments, students }: PageProps) {
                                 </Button>
                               </div>
                             </td>
+                            )}
                           </tr>
                         );
                       })}

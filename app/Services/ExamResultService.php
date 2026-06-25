@@ -49,9 +49,7 @@ class ExamResultService
 
         return Student::query()
             ->where('school_id', $exam->school_id)
-            ->when($class->school_branch_id, fn ($query) => $query->where('school_branch_id', $class->school_branch_id))
-            ->where('grade_level', $class->grade_level)
-            ->when($class->section, fn ($query) => $query->where('class_section', $class->section))
+            ->where('class_id', $class->id)
             ->orderBy('last_name')
             ->orderBy('first_name')
             ->get();

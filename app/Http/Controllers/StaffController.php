@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\SchoolClass;
 use App\Models\Staff;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -27,6 +28,24 @@ class StaffController extends Controller
         return Inertia::render('dashboard/staff/page', [
             'staff' => $staff,
             'stats' => $stats,
+        ]);
+    }
+
+    public function show(Staff $staff): Response
+    {
+        abort_unless($staff->school_id === $this->schoolId(), 403);
+
+        $staff->load('branch');
+
+        $taughtClasses = SchoolClass::forSchool($staff->school_id)
+            ->where('class_teacher_id', $staff->id)
+            ->with('assignedRoom:id,name,building')
+            ->orderBy('name')
+            ->get(['id', 'uuid', 'name', 'grade_level', 'section', 'room', 'class_room_id']);
+
+        return Inertia::render('dashboard/staff/show', [
+            'staffMember' => $staff,
+            'taughtClasses' => $taughtClasses,
         ]);
     }
 

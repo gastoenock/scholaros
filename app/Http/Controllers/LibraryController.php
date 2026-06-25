@@ -6,6 +6,7 @@ use App\Models\LibraryBook;
 use App\Models\LibraryIssuance;
 use App\Models\Staff;
 use App\Models\Student;
+use App\Support\RoleAccess;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -35,6 +36,7 @@ class LibraryController extends Controller
             'issuances' => $issuances,
             'students' => $students,
             'staff' => $staff,
+            'canManage' => RoleAccess::can(auth()->user(), 'library.manage'),
         ]);
     }
 
@@ -42,6 +44,7 @@ class LibraryController extends Controller
 
     public function storeBook(Request $request): RedirectResponse
     {
+        abort_unless(RoleAccess::can(auth()->user(), 'library.manage'), 403);
         $schoolId = $this->schoolId();
         abort_unless($schoolId, 403);
 
@@ -69,6 +72,7 @@ class LibraryController extends Controller
 
     public function destroyBook(LibraryBook $book): RedirectResponse
     {
+        abort_unless(RoleAccess::can(auth()->user(), 'library.manage'), 403);
         abort_unless($book->school_id === $this->schoolId(), 403);
 
         $book->delete();
@@ -80,6 +84,7 @@ class LibraryController extends Controller
 
     public function issue(Request $request): RedirectResponse
     {
+        abort_unless(RoleAccess::can(auth()->user(), 'library.manage'), 403);
         $schoolId = $this->schoolId();
         abort_unless($schoolId, 403);
 
@@ -115,6 +120,7 @@ class LibraryController extends Controller
 
     public function returnBook(LibraryIssuance $issuance): RedirectResponse
     {
+        abort_unless(RoleAccess::can(auth()->user(), 'library.manage'), 403);
         abort_unless($issuance->school_id === $this->schoolId(), 403);
 
         if ($issuance->status !== 'returned') {

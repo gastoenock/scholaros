@@ -1,34 +1,14 @@
-import { Link, router, usePage } from "@inertiajs/react";
+import { Link, router } from "@inertiajs/react";
 import { cn } from "@/lib/utils.ts";
 import {
   GraduationCap,
-  LayoutDashboard,
-  Users,
-  Building2,
-  BookOpen,
-  Calendar,
-  CreditCard,
-  Bus,
-  Home,
-  Bell,
-  BarChart3,
-  SlidersHorizontal,
-  Cog,
-  Shield,
   UserCircle,
   LogOut,
-  Menu,
   X,
   ChevronDown,
-  School,
-  ClipboardList,
-  Package,
-  UserCheck,
-  Handshake,
-  CalendarRange,
-  FileBarChart,
+  ChevronRight,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useAuth } from "@/hooks/use-auth.ts";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar.tsx";
 import {
@@ -38,93 +18,175 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu.tsx";
 import { Badge } from "@/components/ui/badge.tsx";
-import type { SharedPageProps } from "@/lib/types.ts";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible.tsx";
+import { dashboardHomeForRole } from "@/hooks/use-dashboard-home.ts";
+import {
+  groupHasActiveItem,
+  isNavItemActive,
+  resolveNavHref,
+  type NavItem,
+  type VisibleNavGroup,
+} from "./dashboard-nav.ts";
+import { useDashboardNav } from "./use-dashboard-nav.ts";
 
-type NavItem = {
-  label: string;
-  href: string;
-  icon: React.ElementType;
-  roles?: string[];
-  badge?: string;
-};
+function NavLink({
+  item,
+  role,
+  currentPath,
+  navHrefs,
+  onClose,
+  nested = false,
+}: {
+  item: NavItem;
+  role?: string;
+  currentPath: string;
+  navHrefs: string[];
+  onClose?: () => void;
+  nested?: boolean;
+}) {
+  const href = resolveNavHref(item, role);
+  const isActive = isNavItemActive(href, currentPath, role, navHrefs);
 
-const navItems: NavItem[] = [
-  { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
-  { label: "Schools", href: "/dashboard/schools", icon: School, roles: ["superadmin", "landlord"] },
-  { label: "Admin Panel", href: "/dashboard/admin", icon: Shield, roles: ["superadmin", "landlord"] },
-  { label: "System Settings", href: "/dashboard/admin/settings", icon: Cog, roles: ["superadmin", "landlord"] },
-  { label: "Parent Portal", href: "/dashboard/parent-portal", icon: UserCheck, roles: ["parent"] },
-  { label: "Students", href: "/dashboard/students", icon: Users, roles: ["admin", "teacher", "superadmin"] },
-  { label: "Staff", href: "/dashboard/staff", icon: Users, roles: ["admin", "superadmin"] },
-  { label: "Admissions", href: "/dashboard/admissions", icon: ClipboardList, roles: ["admin", "superadmin"] },
-  { label: "Classes", href: "/dashboard/classes", icon: BookOpen, roles: ["admin", "teacher", "superadmin"] },
-  { label: "Attendance", href: "/dashboard/attendance", icon: Calendar, roles: ["admin", "teacher", "superadmin"] },
-  { label: "Timetable", href: "/dashboard/timetable", icon: Calendar, roles: ["admin", "teacher", "student", "superadmin"] },
-  { label: "Academics", href: "/dashboard/academics", icon: BookOpen, roles: ["admin", "teacher", "student", "parent", "superadmin"] },
-  { label: "Exam Reports", href: "/dashboard/academics/reports", icon: FileBarChart, roles: ["admin", "teacher", "superadmin"] },
-  { label: "Academic Calendar", href: "/dashboard/academic-calendar", icon: CalendarRange, roles: ["admin", "superadmin"] },
-  { label: "Meetings", href: "/dashboard/meetings", icon: Handshake, roles: ["admin", "teacher", "parent", "superadmin"] },
-  { label: "Events", href: "/dashboard/events", icon: Calendar, roles: ["admin", "teacher", "superadmin"] },
-  { label: "Finance", href: "/dashboard/finance", icon: CreditCard, roles: ["admin", "parent", "superadmin"] },
-  { label: "Payroll & HR", href: "/dashboard/payroll", icon: Users, roles: ["admin", "superadmin"] },
-  { label: "Transport", href: "/dashboard/transport", icon: Bus, roles: ["admin", "parent", "superadmin"] },
-  { label: "Dormitory", href: "/dashboard/dormitory", icon: Home, roles: ["admin", "superadmin"] },
-  { label: "Inventory", href: "/dashboard/assets", icon: Package, roles: ["admin", "superadmin"] },
-  { label: "Analytics", href: "/dashboard/analytics", icon: BarChart3, roles: ["admin", "superadmin"] },
-  { label: "Messages", href: "/dashboard/messages", icon: Bell, roles: ["admin", "teacher", "student", "parent", "superadmin"] },
-  { label: "Notifications", href: "/dashboard/notifications", icon: Bell, roles: ["admin", "teacher", "student", "parent", "superadmin"] },
-  { label: "Library", href: "/dashboard/library", icon: BookOpen, roles: ["admin", "teacher", "student", "superadmin"] },
-  { label: "Buildings", href: "/dashboard/campus", icon: Building2, roles: ["admin", "superadmin"] },
-  { label: "Settings", href: "/dashboard/settings", icon: SlidersHorizontal, roles: ["admin", "superadmin"] },
-];
-
-const platformOnlyLabels = new Set(["Dashboard", "Schools", "Admin Panel", "System Settings"]);
-
-function canAccessNavItem(item: NavItem, role: string): boolean {
-  if (!item.roles) {
-    return true;
-  }
-
-  if (item.roles.includes(role)) {
-    return true;
-  }
-
-  if ((role === "superadmin" || role === "landlord") && item.roles.includes("superadmin")) {
-    return true;
-  }
-
-  return false;
+  return (
+    <Link
+      href={href}
+      onClick={onClose}
+      className={cn(
+        "flex items-center gap-3 rounded-xl text-sm font-medium transition-all cursor-pointer",
+        nested ? "px-3 py-2 ml-6" : "px-3 py-2.5",
+        isActive
+          ? nested
+            ? "bg-primary/10 text-primary font-semibold"
+            : "bg-primary text-primary-foreground shadow-sm"
+          : "text-muted-foreground hover:bg-muted/70 hover:text-foreground",
+      )}
+    >
+      <item.icon className="h-4 w-4 flex-shrink-0" />
+      {item.label}
+      {item.badge && (
+        <span className="ml-auto text-xs bg-destructive text-white rounded-full px-1.5 py-0.5">
+          {item.badge}
+        </span>
+      )}
+    </Link>
+  );
 }
 
-function SidebarContent({
+function NavGroupSection({
+  group,
   role,
-  user,
-  isPlatformAdmin,
-  manageTenantId,
-  manageTenantName,
-  isTenantHost,
+  currentPath,
+  navHrefs,
+  open,
+  onOpenChange,
   onClose,
 }: {
+  group: VisibleNavGroup;
   role?: string;
-  user: { name?: string; email?: string } | null;
-  isPlatformAdmin: boolean;
-  manageTenantId: number | null;
-  manageTenantName: string | null;
-  isTenantHost: boolean;
+  currentPath: string;
+  navHrefs: string[];
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
   onClose?: () => void;
 }) {
+  const hasActive = groupHasActiveItem(group, currentPath, role, navHrefs);
+
+  if (group.id === "home") {
+    return (
+      <div className="space-y-0.5 pb-2 mb-2 border-b border-border/60">
+        {group.items.map((item) => (
+          <NavLink
+            key={`${group.id}-${item.label}`}
+            item={item}
+            role={role}
+            currentPath={currentPath}
+            navHrefs={navHrefs}
+            onClose={onClose}
+          />
+        ))}
+      </div>
+    );
+  }
+
+  if (group.items.length === 1) {
+    return (
+      <NavLink
+        item={group.items[0]}
+        role={role}
+        currentPath={currentPath}
+        navHrefs={navHrefs}
+        onClose={onClose}
+      />
+    );
+  }
+
+  return (
+    <Collapsible open={open} onOpenChange={onOpenChange}>
+      <CollapsibleTrigger
+        className={cn(
+          "flex w-full items-center gap-2 px-3 py-2 rounded-xl text-sm font-semibold transition-colors cursor-pointer",
+          hasActive
+            ? "text-foreground bg-muted/50"
+            : "text-muted-foreground hover:bg-muted/40 hover:text-foreground",
+        )}
+      >
+        <group.icon className="h-4 w-4 flex-shrink-0" />
+        <span className="flex-1 text-left">{group.label}</span>
+        {open ? (
+          <ChevronDown className="h-3.5 w-3.5 opacity-60" />
+        ) : (
+          <ChevronRight className="h-3.5 w-3.5 opacity-60" />
+        )}
+      </CollapsibleTrigger>
+      <CollapsibleContent className="mt-0.5 space-y-0.5 pb-1">
+        {group.items.map((item) => (
+          <NavLink
+            key={`${group.id}-${item.label}-${item.href}`}
+            item={item}
+            role={role}
+            currentPath={currentPath}
+            navHrefs={navHrefs}
+            onClose={onClose}
+            nested
+          />
+        ))}
+      </CollapsibleContent>
+    </Collapsible>
+  );
+}
+
+function SidebarContent({ onClose }: { onClose?: () => void }) {
   const { signout } = useAuth();
-  const { url } = usePage();
-  const currentPath = url.split("?")[0];
-  const managingTenant = isPlatformAdmin && (!!manageTenantId || isTenantHost);
+  const {
+    groups,
+    navHrefs,
+    currentPath,
+    role: rawRole,
+    managingTenant,
+    manageTenantName,
+    user,
+  } = useDashboardNav();
+  const role = rawRole ?? undefined;
 
-  const visibleItems = navItems.filter((item) => {
-    if (isPlatformAdmin && !managingTenant) {
-      return platformOnlyLabels.has(item.label);
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(() => {
+    const initial: Record<string, boolean> = {};
+    for (const group of groups) {
+      initial[group.id] = groupHasActiveItem(group, currentPath, role, navHrefs);
     }
-
-    return !role || canAccessNavItem(item, role);
+    return initial;
   });
+
+  useEffect(() => {
+    setOpenGroups((prev) => {
+      const next = { ...prev };
+      for (const group of groups) {
+        if (groupHasActiveItem(group, currentPath, role, navHrefs)) {
+          next[group.id] = true;
+        }
+      }
+      return next;
+    });
+  }, [currentPath, groups, role, navHrefs]);
 
   const handleSignOut = () => {
     void signout();
@@ -136,39 +198,37 @@ function SidebarContent({
   };
 
   return (
-    <div className="flex flex-col h-full bg-sidebar text-sidebar-foreground">
-      {/* Logo */}
-      <div className="flex items-center justify-between px-4 h-16 border-b border-sidebar-border">
+    <div className="flex flex-col h-full bg-card text-foreground">
+      <div className="flex items-center justify-between px-4 h-16 border-b border-border/60">
         <div
-          className="flex items-center gap-2 cursor-pointer"
-          onClick={() => { router.visit("/"); onClose?.(); }}
+          className="flex items-center gap-2.5 cursor-pointer"
+          onClick={() => { router.visit(dashboardHomeForRole(role)); onClose?.(); }}
         >
-          <div className="w-8 h-8 rounded-lg bg-sidebar-primary flex items-center justify-center">
-            <GraduationCap className="h-5 w-5 text-sidebar-primary-foreground" />
+          <div className="w-9 h-9 rounded-xl bg-primary flex items-center justify-center shadow-sm">
+            <GraduationCap className="h-5 w-5 text-primary-foreground" />
           </div>
-          <span className="text-base font-extrabold">ScholarOS</span>
+          <span className="text-base font-bold tracking-tight">ScholarOS</span>
         </div>
         {onClose && (
-          <button title="onClose" onClick={onClose} className="cursor-pointer text-sidebar-foreground/60 hover:text-sidebar-foreground">
+          <button title="Close menu" onClick={onClose} className="cursor-pointer text-muted-foreground hover:text-foreground">
             <X className="h-5 w-5" />
           </button>
         )}
       </div>
 
-      {/* Role badge */}
       {role && (
-        <div className="px-4 py-3 border-b border-sidebar-border space-y-2">
-          <Badge className="bg-sidebar-primary/20 text-sidebar-primary border-sidebar-primary/30 capitalize text-xs">
-            {role}
+        <div className="px-4 py-3 border-b border-border/60 space-y-2">
+          <Badge variant="secondary" className="capitalize text-xs font-medium">
+            {role.replace(/_/g, " ")}
           </Badge>
           {managingTenant && manageTenantName && (
-            <div className="rounded-lg bg-sidebar-accent/40 px-3 py-2">
-              <p className="text-[10px] uppercase tracking-wide text-sidebar-foreground/50">Managing</p>
+            <div className="rounded-xl bg-muted/50 px-3 py-2">
+              <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Managing</p>
               <p className="text-xs font-semibold truncate">{manageTenantName}</p>
               <button
                 type="button"
                 onClick={handleLeaveTenant}
-                className="mt-2 text-[11px] font-medium text-sidebar-primary hover:underline cursor-pointer"
+                className="mt-2 text-[11px] font-medium text-primary hover:underline cursor-pointer"
               >
                 Exit school
               </button>
@@ -177,52 +237,35 @@ function SidebarContent({
         </div>
       )}
 
-      {/* Nav */}
-      <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-0.5">
-        {visibleItems.map((item) => {
-          const isActive =
-            item.href === "/dashboard"
-              ? currentPath === "/dashboard"
-              : currentPath.startsWith(item.href);
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              onClick={onClose}
-              className={cn(
-                "flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors cursor-pointer",
-                isActive
-                  ? "bg-sidebar-accent text-sidebar-primary"
-                  : "text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground"
-              )}
-            >
-              <item.icon className="h-4 w-4 flex-shrink-0" />
-              {item.label}
-              {item.badge && (
-                <span className="ml-auto text-xs bg-destructive text-white rounded-full px-1.5 py-0.5">
-                  {item.badge}
-                </span>
-              )}
-            </Link>
-          );
-        })}
+      <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-1">
+        {groups.map((group) => (
+          <NavGroupSection
+            key={group.id}
+            group={group}
+            role={role}
+            currentPath={currentPath}
+            navHrefs={navHrefs}
+            open={openGroups[group.id] ?? false}
+            onOpenChange={(open) => setOpenGroups((prev) => ({ ...prev, [group.id]: open }))}
+            onClose={onClose}
+          />
+        ))}
       </nav>
 
-      {/* User */}
-      <div className="border-t border-sidebar-border p-4">
+      <div className="border-t border-border/60 p-4">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <button className="flex items-center gap-3 w-full px-2 py-2 rounded-lg hover:bg-sidebar-accent/50 transition-colors cursor-pointer">
+            <button className="flex items-center gap-3 w-full px-2 py-2 rounded-xl hover:bg-muted/60 transition-colors cursor-pointer">
               <Avatar className="h-8 w-8">
-                <AvatarFallback className="bg-sidebar-primary text-sidebar-primary-foreground text-xs font-bold">
+                <AvatarFallback className="bg-primary text-primary-foreground text-xs font-bold">
                   {user?.name?.charAt(0).toUpperCase() ?? "U"}
                 </AvatarFallback>
               </Avatar>
               <div className="flex-1 text-left min-w-0">
                 <p className="text-xs font-semibold truncate">{user?.name ?? "User"}</p>
-                <p className="text-xs text-sidebar-foreground/50 truncate">{user?.email}</p>
+                <p className="text-xs text-muted-foreground truncate">{user?.email}</p>
               </div>
-              <ChevronDown className="h-3.5 w-3.5 text-sidebar-foreground/50" />
+              <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent side="top" align="start" className="w-56">
@@ -243,51 +286,31 @@ function SidebarContent({
   );
 }
 
-export function DashboardSidebar() {
-  const [mobileOpen, setMobileOpen] = useState(false);
-  const { auth, platform, tenancyHost } = usePage<SharedPageProps>().props;
-  const currentUser = auth.user;
-  const sidebarProps = {
-    role: currentUser?.role ?? undefined,
-    user: currentUser,
-    isPlatformAdmin: platform?.isPlatformAdmin ?? false,
-    manageTenantId: platform?.manageTenantId ?? null,
-    manageTenantName: platform?.manageTenantName ?? null,
-    isTenantHost: tenancyHost?.isTenant ?? false,
-  };
+export function DashboardSidebar({
+  mobileOpen,
+  onMobileOpenChange,
+}: {
+  mobileOpen?: boolean;
+  onMobileOpenChange?: (open: boolean) => void;
+}) {
+  const [internalOpen, setInternalOpen] = useState(false);
+  const isOpen = mobileOpen ?? internalOpen;
+  const setOpen = onMobileOpenChange ?? setInternalOpen;
 
   return (
     <>
-      {/* Desktop sidebar */}
-      <aside className="hidden md:flex md:w-64 md:flex-col md:fixed md:inset-y-0 border-r border-sidebar-border z-30">
-        <SidebarContent {...sidebarProps} />
+      <aside className="hidden md:flex md:w-[260px] md:flex-col md:fixed md:inset-y-0 border-r border-border/60 bg-card z-30 shadow-sm">
+        <SidebarContent />
       </aside>
 
-      {/* Mobile header */}
-      <div className="md:hidden fixed top-0 left-0 right-0 z-40 bg-sidebar border-b border-sidebar-border h-14 flex items-center px-4 gap-3">
-        <button title="setMobileOpen" onClick={() => setMobileOpen(true)} className="cursor-pointer text-sidebar-foreground">
-          <Menu className="h-5 w-5" />
-        </button>
-        <div className="flex items-center gap-2">
-          <div className="w-7 h-7 rounded-lg bg-sidebar-primary flex items-center justify-center">
-            <GraduationCap className="h-4 w-4 text-sidebar-primary-foreground" />
-          </div>
-          <span className="text-sm font-extrabold text-sidebar-foreground">ScholarOS</span>
-        </div>
-      </div>
-
-      {/* Mobile overlay */}
-      {mobileOpen && (
+      {isOpen && (
         <div className="md:hidden fixed inset-0 z-50 flex">
           <div
-            className="absolute inset-0 bg-black/50"
-            onClick={() => setMobileOpen(false)}
+            className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+            onClick={() => setOpen(false)}
           />
-          <div className="relative w-72 flex-shrink-0">
-            <SidebarContent
-              {...sidebarProps}
-              onClose={() => setMobileOpen(false)}
-            />
+          <div className="relative w-72 flex-shrink-0 shadow-xl">
+            <SidebarContent onClose={() => setOpen(false)} />
           </div>
         </div>
       )}

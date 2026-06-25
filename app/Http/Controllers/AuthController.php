@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\PlatformUser;
 use App\Models\School;
 use App\Models\User;
+use App\Services\RoleDashboardService;
 use App\Support\TenancyUrl;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -17,6 +18,10 @@ use Inertia\Response;
 
 class AuthController extends Controller
 {
+    public function __construct(
+        private RoleDashboardService $roleDashboard,
+    ) {}
+
     public function showSchoolPortal(): Response
     {
         return Inertia::render('auth/school-portal', [
@@ -54,6 +59,7 @@ class AuthController extends Controller
             ] : null,
             'platformLoginUrl' => TenancyUrl::centralUrl('/login/platform'),
             'centralDomain' => TenancyUrl::centralDomain(),
+            'signupUrl' => TenancyUrl::tenantRoute('tenant.signup'),
         ]);
     }
 
@@ -78,6 +84,7 @@ class AuthController extends Controller
             'email' => ['required', 'email'],
             'password' => ['required', 'string'],
             'remember' => ['sometimes', 'boolean'],
+            'portal' => ['required', 'in:staff,parent,student'],
         ]);
 
         if (! Auth::guard('web')->attempt(
@@ -89,13 +96,39 @@ class AuthController extends Controller
             ]);
         }
 
+        /** @var User $user */
+        $user = Auth::guard('web')->user();
+
+        if (! $user->is_active) {
+            Auth::guard('web')->logout();
+            throw ValidationException::withMessages([
+                'email' => 'This account has been deactivated. Contact your school administrator.',
+            ]);
+        }
+
+        if (! $this->roleDashboard->portalAllowsRole($validated['portal'], $user->role)) {
+            Auth::guard('web')->logout();
+            throw ValidationException::withMessages([
+                'portal' => 'This account cannot sign in through the selected portal. Choose the correct sign-in option for your role.',
+            ]);
+        }
+
         Auth::guard('platform')->logout();
         Auth::shouldUse('web');
 
         $request->session()->regenerate();
         $request->session()->forget('manage_tenant_id');
 
-        return redirect()->intended(TenancyUrl::tenantRoute('tenant.dashboard.index'));
+        return redirect()->intended($this->postLoginPath($user));
+    }
+
+    private function postLoginPath(User $user): string
+    {
+        if ($user->isParent()) {
+            return TenancyUrl::tenantRoute('parent-portal.index');
+        }
+
+        return TenancyUrl::tenantRoute('tenant.dashboard.index');
     }
 
     public function platformLogin(Request $request): RedirectResponse
@@ -154,7 +187,7 @@ class AuthController extends Controller
         $request->session()->regenerate();
         $request->session()->forget('manage_tenant_id');
 
-        return redirect()->to(TenancyUrl::tenantRoute('tenant.dashboard.index'));
+        return redirect()->to($this->postLoginPath($user));
     }
 
     public function tenantLogout(Request $request): RedirectResponse

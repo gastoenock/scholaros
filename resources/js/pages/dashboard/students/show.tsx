@@ -106,7 +106,7 @@ function StudentShowContent({
   transport,
 }: PageProps) {
   const handleDelete = async () => {
-    await routerDeleteWithConfirm(`/dashboard/students/${student.id}`, {
+    await routerDeleteWithConfirm(`/dashboard/students/${student.uuid}`, {
       title: "Remove this student?",
       text: "The student record will be soft-deleted.",
       onSuccess: () => toast.success("Student removed"),
@@ -129,7 +129,7 @@ function StudentShowContent({
         </div>
         <div className="flex gap-2">
           <Badge className={`${statusColors[student.status]} border capitalize`}>{student.status}</Badge>
-          <Button variant="outline" size="sm" className="cursor-pointer" onClick={() => router.visit(`/dashboard/students?edit=${student.id}`)}>
+          <Button variant="outline" size="sm" className="cursor-pointer" onClick={() => router.visit(`/dashboard/students?edit=${student.uuid}`)}>
             <Pencil className="h-3.5 w-3.5 mr-1.5" /> Edit
           </Button>
           <Button variant="destructive" size="sm" className="cursor-pointer" onClick={handleDelete}>
